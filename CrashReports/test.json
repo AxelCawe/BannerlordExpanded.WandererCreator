@@ -1,0 +1,73 @@
+{
+  "ProjectName": "MyWandererMod",
+  "ModuleId": "MyWandererMod",
+  "Version": "1.0.0",
+  "Wanderers": [
+    {
+      "Id": "6796cea5-f25a-48f9-811b-47e03eede115",
+      "Name": "New Wanderer",
+      "Culture": "Empire",
+      "IsFemale": true,
+      "Age": 22,
+      "BodyPropertiesString": "<BodyProperties version=\"4\" age=\"22.04\" weight=\"0.5355\" build=\"0.5015\"  key=\"00109C0D8000134D59A4894CAAA8A4A6BC7262A86699976479AD7D8A99877A3A007886030768E986000000000000000000000000000000000000000000FC1142\"  />",
+      "Traits": {},
+      "Skills": {},
+      "EquipmentBattle": {},
+      "EquipmentCivilian": {},
+      "CivilianTemplateIds": [
+        "eq_civ_custom_6796cea5-f25a-48f9-811b-47e03eede115_fcc8",
+        "custom_civ"
+      ],
+      "BattleTemplateIds": [
+        "eq_battle_custom_6796cea5-f25a-48f9-811b-47e03eede115_a9a5"
+      ],
+      "Equipment": {},
+      "CivilianTemplate": "NPCCharacter.villager_empire",
+      "BattleTemplate": "NPCCharacter.villager_empire",
+      "Dialogs": {
+        "Intro": "{=!}Hello there. I am a wanderer.",
+        "LifeStory": "{=!}I have seen many things...",
+        "LifeStoryB": "{=!}...",
+        "LifeStoryC": "{=!}...",
+        "Recruitment": "{=!}I can join you for a price.",
+        "GenericBackstory": "{=!}A wandering warrior.",
+        "Response1": "{=!}Most interesting. Go on.",
+        "Response2": "{=!}I have heard enough.",
+        "Cost": "500"
+      }
+    }
+  ],
+  "SharedTemplates": [
+    {
+      "Id": "eq_civ_custom_6796cea5-f25a-48f9-811b-47e03eede115_fcc8",
+      "Name": "eq_civ_custom_6796cea5-f25a-48f9-811b-47e03eede115_fcc8 (Civ)",
+      "IsCivilian": true,
+      "Items": {
+        "WeaponItemBeginSlot": "seax_blunt",
+        "Body": "cloth_tunic",
+        "Leg": "strapped_shoes",
+        "Cape": "scarf"
+      }
+    },
+    {
+      "Id": "eq_battle_custom_6796cea5-f25a-48f9-811b-47e03eede115_a9a5",
+      "Name": "eq_battle_custom_6796cea5-f25a-48f9-811b-47e03eede115_a9a5 (Battle)",
+      "IsCivilian": false,
+      "Items": {
+        "WeaponItemBeginSlot": "dagger_jambiya"
+      }
+    },
+    {
+      "Id": "custom_civ",
+      "Name": "custom_civ (Civ)",
+      "IsCivilian": true,
+      "Items": {
+        "WeaponItemBeginSlot": "peasant_polearm_1_t1",
+        "Weapon2": "sling_stoneammo",
+        "Body": "tundra_tunic",
+        "Leg": "strapped_leather_boots",
+        "Cape": "scarf"
+      }
+    }
+  ]
+}

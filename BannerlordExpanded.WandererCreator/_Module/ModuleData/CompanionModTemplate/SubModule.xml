@@ -1,0 +1,23 @@
+<Module>
+    <Id value="{{ModuleId}}"/>
+    <Name value="{{ModuleName}}"/>
+    <Version value="{{Version}}"/>
+    <DefaultModule value="false"/>
+    <ModuleCategory value="Singleplayer"/>
+    <DependedModules>
+        <DependedModule Id="Native"/>
+        <DependedModule Id="SandBoxCore"/>
+        <DependedModule Id="Sandbox"/>
+        <DependedModule Id="StoryMode"/>
+    </DependedModules>
+    <SubModules/>
+    <Xmls>
+        <XmlNode>
+            <XmlName id="NPCCharacters" path="wanderers"/>
+            <IncludedGameTypes>
+                <GameType value="Campaign"/>
+                <GameType value="CampaignStoryMode"/>
+            </IncludedGameTypes>
+        </XmlNode>
+    </Xmls>
+</Module>
