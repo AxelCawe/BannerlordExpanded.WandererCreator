@@ -4,26 +4,20 @@
   "Version": "1.0.0",
   "Wanderers": [
     {
-      "Id": "6796cea5-f25a-48f9-811b-47e03eede115",
+      "Id": "9df28cbc-e82f-4ccc-a257-201adceb6bda",
       "Name": "New Wanderer",
       "Culture": "Empire",
       "IsFemale": true,
+      "Voice": "curt",
       "Age": 22,
-      "BodyPropertiesString": "<BodyProperties version=\"4\" age=\"22.04\" weight=\"0.5355\" build=\"0.5015\"  key=\"00109C0D8000134D59A4894CAAA8A4A6BC7262A86699976479AD7D8A99877A3A007886030768E986000000000000000000000000000000000000000000FC1142\"  />",
-      "Traits": {},
-      "Skills": {},
-      "EquipmentBattle": {},
-      "EquipmentCivilian": {},
+      "DefaultGroup": "Infantry",
+      "SkillTemplate": "skill_template_21d603c7",
+      "TraitTemplate": "trait_template_2848e4e8",
+      "BodyPropertiesString": "<BodyProperties version=\"4\" age=\"22.19\" weight=\"0.4626\" build=\"0.5244\"  key=\"000DC00C40003018116072448984015CA30AF91581210119E203C302C7A290C90078700307FE284000000000000000000000000000000000000000003AF000C0\"  />",
       "CivilianTemplateIds": [
-        "eq_civ_custom_6796cea5-f25a-48f9-811b-47e03eede115_fcc8",
-        "custom_civ"
+        "eq_civ_custom_9df28cbc-e82f-4ccc-a257-201adceb6bda_6a5e"
       ],
-      "BattleTemplateIds": [
-        "eq_battle_custom_6796cea5-f25a-48f9-811b-47e03eede115_a9a5"
-      ],
-      "Equipment": {},
-      "CivilianTemplate": "NPCCharacter.villager_empire",
-      "BattleTemplate": "NPCCharacter.villager_empire",
+      "BattleTemplateIds": [],
       "Dialogs": {
         "Intro": "{=!}Hello there. I am a wanderer.",
         "LifeStory": "{=!}I have seen many things...",
@@ -39,34 +33,36 @@
   ],
   "SharedTemplates": [
     {
-      "Id": "eq_civ_custom_6796cea5-f25a-48f9-811b-47e03eede115_fcc8",
-      "Name": "eq_civ_custom_6796cea5-f25a-48f9-811b-47e03eede115_fcc8 (Civ)",
+      "Id": "eq_civ_custom_9df28cbc-e82f-4ccc-a257-201adceb6bda_6a5e",
+      "Name": "eq_civ_custom_9df28cbc-e82f-4ccc-a257-201adceb6bda_6a5e (Civ)",
       "IsCivilian": true,
       "Items": {
-        "WeaponItemBeginSlot": "seax_blunt",
-        "Body": "cloth_tunic",
-        "Leg": "strapped_shoes",
-        "Cape": "scarf"
+        "WeaponItemBeginSlot": "seax_blunt"
+      }
+    }
+  ],
+  "SharedSkillTemplates": [
+    {
+      "Id": "skill_template_21d603c7",
+      "Name": "skill_template_21d603c7",
+      "Skills": {
+        "Bow": 300
+      }
+    }
+  ],
+  "SharedTraitTemplates": [
+    {
+      "Id": "trait_template_2848e4e8",
+      "Name": "trait_template_2848e4e8",
+      "Traits": {
+        "Valor": 2
       }
     },
     {
-      "Id": "eq_battle_custom_6796cea5-f25a-48f9-811b-47e03eede115_a9a5",
-      "Name": "eq_battle_custom_6796cea5-f25a-48f9-811b-47e03eede115_a9a5 (Battle)",
-      "IsCivilian": false,
-      "Items": {
-        "WeaponItemBeginSlot": "dagger_jambiya"
-      }
-    },
-    {
-      "Id": "custom_civ",
-      "Name": "custom_civ (Civ)",
-      "IsCivilian": true,
-      "Items": {
-        "WeaponItemBeginSlot": "peasant_polearm_1_t1",
-        "Weapon2": "sling_stoneammo",
-        "Body": "tundra_tunic",
-        "Leg": "strapped_leather_boots",
-        "Cape": "scarf"
+      "Id": "trait_template_700b1349",
+      "Name": "trait_template_700b1349",
+      "Traits": {
+        "Valor": 1
       }
     }
   ]

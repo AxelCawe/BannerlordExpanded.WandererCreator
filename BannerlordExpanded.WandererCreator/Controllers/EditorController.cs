@@ -1,3 +1,4 @@
+using BannerlordExpanded.WandererCreator.VersionCompatibility;
 using BannerlordExpanded.WandererCreator.Models;
 using BannerlordExpanded.WandererCreator.Services;
 using BannerlordExpanded.WandererCreator.UI;
@@ -10,6 +11,7 @@ using System.Threading;
 using System.Windows.Forms;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.GameState;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.ObjectSystem;
@@ -20,6 +22,8 @@ namespace BannerlordExpanded.WandererCreator.Controllers
     {
         private CreatorForm _form;
         private Thread _formThread;
+        private List<string> _cachedSkillIds; // Dynamic Skills
+        private List<string> _cachedTraitIds; // Dynamic Traits
 
         public static EditorController Instance { get; private set; }
         public bool ShouldExit { get; private set; }
@@ -47,8 +51,10 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             // Since I am not 100% sure on the exact API availability in this environment (references seem standard), 
             // I will use a safe "Ask" if detection fails, or just proceed if we can't detect.
 
-            // However, to satisfy the prompt "Stop the user", I will simulate detection logic.
-            bool isExclusive = false; // Replace with: TaleWorlds.Engine.Utilities.GetEngineOption("WindowMode") == 2
+            // Detect exclusive fullscreen using NativeOptions
+            // DisplayMode values: 0 = Fullscreen (exclusive), 1 = Windowed, 2 = Borderless
+            bool isExclusive = TaleWorlds.Engine.Options.NativeOptions.GetConfig(
+                TaleWorlds.Engine.Options.NativeOptions.NativeOptionsType.DisplayMode) == 0f;
 
             if (isExclusive)
             {
@@ -61,6 +67,17 @@ namespace BannerlordExpanded.WandererCreator.Controllers
 
         public void Start()
         {
+            try
+            {
+                _cachedSkillIds = GetSkillIdsFromGame();
+                _cachedTraitIds = GetTraitIdsFromGame();
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"Error fetching skills/traits: {ex}");
+                _cachedSkillIds = new List<string>();
+                _cachedTraitIds = new List<string>();
+            }
             LaunchEditorThread();
         }
 
@@ -84,6 +101,8 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             {
                 Application.EnableVisualStyles();
                 _form = new CreatorForm();
+                if (_cachedSkillIds != null) _form.AvailableSkills = _cachedSkillIds;
+                if (_cachedTraitIds != null) _form.AvailableTraits = _cachedTraitIds;
 
                 // 1. Center the form
                 _form.StartPosition = FormStartPosition.CenterScreen;
@@ -106,6 +125,10 @@ namespace BannerlordExpanded.WandererCreator.Controllers
         private void HandleEditAppearance(WandererDefinition wanderer)
         {
             FileLogger.Log("HandleEditAppearance called");
+            FileLogger.Log($"  Wanderer Name: {wanderer.Name}");
+            FileLogger.Log($"  BodyPropertiesString: '{wanderer.BodyPropertiesString}'");
+            FileLogger.Log($"  BodyPropertiesString IsNullOrEmpty: {string.IsNullOrEmpty(wanderer.BodyPropertiesString)}");
+
             _currentEditingWanderer = wanderer; // Store for later callback
             _form.Invoke(new Action(() => _form.Hide()));
 
@@ -133,37 +156,72 @@ namespace BannerlordExpanded.WandererCreator.Controllers
 
                 FileLogger.Log($"Dummy Character created: {dummy.Name} (Race: {dummy.Race}, Monster: {derivedMonster.StringId})");
 
-                // FIX: Load saved BodyProperties onto Hero.MainHero BEFORE FaceGen
-                // BarberState reads/writes to the Hero, not the CharacterObject we pass
-                if (!string.IsNullOrEmpty(wanderer.BodyPropertiesString))
-                {
-                    try
-                    {
-                        if (TaleWorlds.Core.BodyProperties.FromString(wanderer.BodyPropertiesString, out var savedBp))
-                        {
-                            var bpField = typeof(Hero).GetField("_bodyProperties", BindingFlags.NonPublic | BindingFlags.Instance);
-                            if (bpField != null)
-                            {
-                                bpField.SetValue(Hero.MainHero, savedBp);
-                                FileLogger.Log($"Loaded saved BodyProperties onto Hero.MainHero");
-                            }
-                        }
-                    }
-                    catch (Exception bpEx) { FileLogger.Log($"Error loading BodyProperties: {bpEx.Message}"); }
-                }
+                // Capture the body properties string for use in the main thread action
+                string bodyPropsString = wanderer.BodyPropertiesString;
 
                 // Push BarberState via Main Thread
                 SubModule.EnqueueMainThreadAction(() =>
                 {
                     try
                     {
-                        FileLogger.Log("Pushing BarberState (MainThread)...");
-                        _currentFaceGenCharacter = dummy; // Store for later read
-                        GameStateManager.Current.PushState(GameStateManager.Current.CreateState<BarberState>(dummy, new FaceGenCustomFilter()));
+                        var heroCharacter = Hero.MainHero.CharacterObject;
+                        if (heroCharacter == null)
+                        {
+                            FileLogger.Log("[MainThread] ERROR: Hero.MainHero.CharacterObject is null!");
+                            return;
+                        }
+
+                        // Always set IsFemale first (affects skeleton selection)
+                        Hero.MainHero.IsFemale = wanderer.IsFemale;
+                        FileLogger.Log($"[MainThread] Set IsFemale = {wanderer.IsFemale}");
+
+                        // Get or generate body properties
+                        TaleWorlds.Core.BodyProperties bodyProps;
+                        if (!string.IsNullOrEmpty(bodyPropsString) &&
+                            TaleWorlds.Core.BodyProperties.FromString(bodyPropsString, out var savedBp))
+                        {
+                            // Existing wanderer - use saved properties
+                            FileLogger.Log($"[MainThread] Loading saved BodyProperties");
+                            bodyProps = savedBp;
+                        }
+                        else
+                        {
+                            // New wanderer - generate random properties
+                            FileLogger.Log($"[MainThread] Generating new BodyProperties");
+                            var bpMin = heroCharacter.GetBodyPropertiesMin(true);
+                            var bpMax = heroCharacter.GetBodyPropertiesMax(true);
+                            bodyProps = TaleWorlds.Core.FaceGen.GetRandomBodyProperties(
+                                heroCharacter.Race,
+                                wanderer.IsFemale,
+                                bpMin, bpMax,
+                                0, // HairCoverType.None
+                                new Random().Next(),
+                                heroCharacter.BodyPropertyRange?.HairTags ?? "",
+                                heroCharacter.BodyPropertyRange?.BeardTags ?? "",
+                                heroCharacter.BodyPropertyRange?.TattooTags ?? "",
+                                0.1f);
+                        }
+
+                        // Apply body properties to Hero.MainHero
+                        Hero.MainHero.StaticBodyProperties = bodyProps.StaticProperties;
+                        Hero.MainHero.Weight = bodyProps.Weight;
+                        Hero.MainHero.Build = bodyProps.Build;
+
+                        // Ensure BodyPropertyRange exists on CharacterObject
+                        EnsureBodyPropertyRange(heroCharacter);
+                        heroCharacter.BodyPropertyRange?.Init(bodyProps, bodyProps);
+
+                        FileLogger.Log($"[MainThread] Applied BodyProperties to Hero.MainHero");
+
+                        // Push the FaceGen state
+                        _currentFaceGenCharacter = dummy;
+                        GameStateManager.Current.PushState(
+                            GameStateManager.Current.CreateState<BarberState>(dummy, new FaceGenCustomFilter()));
+                        FileLogger.Log("Pushed BarberState");
                     }
                     catch (Exception ex)
                     {
-                        FileLogger.Log($"Error pushing BarberState: {ex}");
+                        FileLogger.Log($"Error in FaceGen setup: {ex}");
                     }
                 });
             }
@@ -172,6 +230,14 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 FileLogger.Log($"Error in HandleEditAppearance: {ex}");
                 InformationManager.ShowInquiry(new InquiryData("Error", "Could not open FaceGen. (Requires Campaign?)\n" + ex.Message, true, false, "Ok", "", () => OnScreenActivated(), null));
             }
+        }
+
+        /// <summary>
+        /// Ensures the given CharacterObject has a BodyPropertyRange. Creates one if null.
+        /// </summary>
+        private void EnsureBodyPropertyRange(BasicCharacterObject character)
+        {
+            GameApiWrapper.EnsureBodyPropertyRange(character);
         }
 
         // Store reference to the wanderer currently being edited (for FaceGen callback)
@@ -205,6 +271,25 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             {
                 _currentEditingWanderer.BodyPropertiesString = actualBp;
                 FileLogger.Log($"Updated BodyProperties for wanderer: {_currentEditingWanderer.Name}");
+
+                // Update Voice
+                try
+                {
+                    // Use standard character object
+                    var charObj = Hero.MainHero.CharacterObject;
+                    if (charObj != null)
+                    {
+                        if (GameApiWrapper.TryGetVoice(charObj, out string voiceId))
+                        {
+                            _currentEditingWanderer.Voice = voiceId;
+                            FileLogger.Log($"Updated Voice for wanderer: {voiceId}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    FileLogger.Log($"Error reading VoiceObject: {ex.Message}");
+                }
             }
 
             // refresh UI
@@ -253,20 +338,6 @@ namespace BannerlordExpanded.WandererCreator.Controllers
 
                 CharacterObject dummy = Hero.MainHero.CharacterObject;
 
-
-                // Infinite Gold for Editing (Reflection)
-                try
-                {
-                    var goldProp = typeof(Hero).GetProperty("Gold");
-                    if (goldProp != null && goldProp.CanWrite) goldProp.SetValue(Hero.MainHero, 100000000); // 100M
-                    else
-                    {
-                        var goldField = typeof(Hero).GetField("_gold", BindingFlags.Instance | BindingFlags.NonPublic);
-                        if (goldField != null) goldField.SetValue(Hero.MainHero, 100000000);
-                    }
-                    FileLogger.Log($"Set Gold to {Hero.MainHero.Gold}");
-                }
-                catch (Exception ex) { FileLogger.Log($"Gold Error: {ex.Message}"); }
 
                 // CRITICAL: InventoryLogic uses CharacterObject.PlayerCharacter, NOT Hero.MainHero.CharacterObject!
                 var playerCharacter = CharacterObject.PlayerCharacter;
@@ -366,10 +437,10 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 false,
                 true,
                 playerCharacter,
-                Helpers.InventoryScreenHelper.InventoryCategoryType.All,
+                global::Helpers.InventoryScreenHelper.InventoryCategoryType.All,
                 null,
                 false,
-                Helpers.InventoryScreenHelper.InventoryMode.Default
+                global::Helpers.InventoryScreenHelper.InventoryMode.Default
             );
 
             var inventoryState = Game.Current.GameStateManager.CreateState<TaleWorlds.CampaignSystem.GameState.InventoryState>();
@@ -436,21 +507,7 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 FileLogger.Log($"Template {_currentEditingTemplate.Id} now has {_currentEditingTemplate.Items.Count} items.");
             }
             // Handle Wanderer Save
-            else if (_currentEditingWanderer != null)
-            {
-                var targetDict = _isEditingCivilianEquipment ? _currentEditingWanderer.EquipmentCivilian : _currentEditingWanderer.EquipmentBattle;
-                targetDict.Clear();
 
-                for (int i = 0; i < 12; i++)
-                {
-                    var eqElement = equipment[i];
-                    if (!eqElement.IsEmpty && eqElement.Item != null)
-                    {
-                        string slotName = ((EquipmentIndex)i).ToString();
-                        targetDict[slotName] = eqElement.Item.StringId;
-                    }
-                }
-            }
 
             // Refresh UI
             if (_currentEditingWanderer != null)
@@ -488,147 +545,106 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             // Populate basic data
             CultureObject culture = Game.Current.ObjectManager.GetObject<CultureObject>(wanderer.Culture) ?? Game.Current.ObjectManager.GetObject<CultureObject>("empire");
 
-            // 1. Set Culture (Read-Only property workaround)
+            // 1. Set Culture using abstraction layer
             if (culture != null)
             {
-                try
-                {
-                    // Try Property with LINQ to avoid AmbiguousMatchException
-                    var cultureProp = typeof(CharacterObject).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                                        .FirstOrDefault(p => p.Name == "Culture");
-
-                    bool cultureSet = false;
-                    if (cultureProp != null && cultureProp.CanWrite)
-                    {
-                        cultureProp.SetValue(character, culture);
-                        cultureSet = true;
-                        FileLogger.Log("Set Culture via Property");
-                    }
-                    else
-                    {
-                        // Try Backing Field on CharacterObject or Base
-                        var type = typeof(CharacterObject);
-                        while (type != null)
-                        {
-                            var field = type.GetField("_culture", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
-                            if (field != null)
-                            {
-                                field.SetValue(character, culture);
-                                cultureSet = true;
-                                FileLogger.Log($"Set Culture via Field on {type.Name}");
-                                break;
-                            }
-                            type = type.BaseType;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    FileLogger.Log($"Failed to set Culture: {ex.Message}");
-                }
-            }
-
-            // 2. Set Race to 0 (Human) - Monster is computed from Race via FaceGen.GetBaseMonsterFromRace()
-            try
-            {
-                // Race 0 = Human in Bannerlord
-                const int HUMAN_RACE_ID = 0;
-
-                bool raceSetSuccess = false;
-
-                // Try Property first
-                var raceProp = typeof(BasicCharacterObject).GetProperty("Race", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                if (raceProp != null && raceProp.CanWrite)
-                {
-                    raceProp.SetValue(character, HUMAN_RACE_ID);
-                    FileLogger.Log("Set Race via Property");
-                    raceSetSuccess = true;
-                }
+                if (GameApiWrapper.TrySetCulture(character, culture))
+                    FileLogger.Log("Set Culture via GameApiWrapper");
                 else
-                {
-                    // Try backing field
-                    var raceField = typeof(BasicCharacterObject).GetField("<Race>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance);
-                    if (raceField != null)
-                    {
-                        raceField.SetValue(character, HUMAN_RACE_ID);
-                        FileLogger.Log("Set Race via <Race>k__BackingField");
-                        raceSetSuccess = true;
-                    }
-                }
+                    FileLogger.Log("Failed to set Culture via GameApiWrapper");
+            }
 
-                if (raceSetSuccess)
-                {
-                    FileLogger.Log($"Race set to {character.Race}. Monster should now be derived from FaceGen.");
-                }
-                else
-                {
-                    FileLogger.Log("Failed to set Race! Monster will be null.");
-                }
-            }
-            catch (Exception ex)
-            {
-                FileLogger.Log($"Error setting Race: {ex}");
-            }
+            // 2. Set Race to 0 (Human) using abstraction layer
+            const int HUMAN_RACE_ID = 0;
+            if (GameApiWrapper.TrySetRace(character, HUMAN_RACE_ID))
+                FileLogger.Log($"Race set to {character.Race} via GameApiWrapper");
+            else
+                FileLogger.Log("Failed to set Race via GameApiWrapper");
 
             // 3. Set other properties
             character.Age = wanderer.Age;
             character.IsFemale = wanderer.IsFemale;
             FileLogger.Log($"Set IsFemale to {wanderer.IsFemale}");
 
-            // 4. Set Name
+            // 4. Set Name using abstraction layer
+            var nameText = new TaleWorlds.Localization.TextObject(wanderer.Name);
+            if (GameApiWrapper.TrySetName(character, nameText))
+                FileLogger.Log("Set Name via GameApiWrapper");
+            else
+                FileLogger.Log("Failed to set Name via GameApiWrapper");
+
+            // 5. BodyProperties - Must create BodyPropertyRange first since it's null on new CharacterObject
+            // BodyPropertyRange = MBObjectManager.Instance.RegisterPresumedObject<MBBodyProperty>(new MBBodyProperty(stringId))
+            // Then call BodyPropertyRange.Init(bodyProps, bodyProps)
             try
             {
-                var nameProp = typeof(BasicCharacterObject).GetProperty("Name", BindingFlags.Public | BindingFlags.Instance);
-                if (nameProp != null && nameProp.CanWrite)
+                TaleWorlds.Core.BodyProperties bodyPropsToSet;
+
+                if (!string.IsNullOrEmpty(wanderer.BodyPropertiesString) && TaleWorlds.Core.BodyProperties.FromString(wanderer.BodyPropertiesString, out var existingBp))
                 {
-                    nameProp.SetValue(character, new TaleWorlds.Localization.TextObject(wanderer.Name));
+                    bodyPropsToSet = existingBp;
+                    FileLogger.Log($"CreateDummyCharacter: Loaded existing BodyProperties from string");
                 }
                 else
                 {
-                    var nameField = typeof(BasicCharacterObject).GetField("_name", BindingFlags.NonPublic | BindingFlags.Instance);
-                    if (nameField != null)
+                    // Generate random body properties
+                    var mn = new TaleWorlds.Core.BodyProperties();
+                    var mx = new TaleWorlds.Core.BodyProperties();
+
+                    bodyPropsToSet = TaleWorlds.Core.FaceGen.GetRandomBodyProperties(
+                         character.Race,
+                         wanderer.IsFemale,
+                         mn,
+                         mx,
+                         0, // HairCoverType.None
+                         (int)DateTime.Now.Ticks,
+                         "", "", "",
+                         0.1f);
+                    FileLogger.Log($"CreateDummyCharacter: Generated random BodyProperties for IsFemale: {wanderer.IsFemale}");
+                }
+
+                // Create BodyPropertyRange if it doesn't exist (it's null on fresh CharacterObject)
+                if (character.BodyPropertyRange == null)
+                {
+                    FileLogger.Log($"CreateDummyCharacter: BodyPropertyRange is null, creating new MBBodyProperty...");
+
+                    // Create the MBBodyProperty object
+                    var mbBodyProperty = TaleWorlds.ObjectSystem.MBObjectManager.Instance.RegisterPresumedObject<TaleWorlds.Core.MBBodyProperty>(
+                        new TaleWorlds.Core.MBBodyProperty(character.StringId));
+
+                    // Set BodyPropertyRange via reflection (protected setter)
+                    var bodyPropertyRangeProp = typeof(BasicCharacterObject).GetProperty("BodyPropertyRange",
+                        BindingFlags.Public | BindingFlags.Instance);
+                    if (bodyPropertyRangeProp != null)
                     {
-                        nameField.SetValue(character, new TaleWorlds.Localization.TextObject(wanderer.Name));
+                        bodyPropertyRangeProp.SetValue(character, mbBodyProperty);
+                        FileLogger.Log($"CreateDummyCharacter: Set BodyPropertyRange via reflection");
                     }
                 }
-            }
-            catch (Exception ex) { FileLogger.Log("Failed to set Name: " + ex.Message); }
 
-            // 5. BodyProperties (Ensure avatar matches gender)
-            try
-            {
-                var bpField = typeof(BasicCharacterObject).GetField("_bodyProperties", BindingFlags.NonPublic | BindingFlags.Instance);
-                if (bpField != null)
+                // Now initialize BodyPropertyRange with our body properties
+                if (character.BodyPropertyRange != null)
                 {
-                    if (!string.IsNullOrEmpty(wanderer.BodyPropertiesString) && TaleWorlds.Core.BodyProperties.FromString(wanderer.BodyPropertiesString, out var existingBp))
-                    {
-                        bpField.SetValue(character, existingBp);
-                    }
-                    else
-                    {
-                        var race = character.Race;
-                        var mn = character.GetBodyPropertiesMin();
-                        var mx = character.GetBodyPropertiesMax();
+                    character.BodyPropertyRange.Init(bodyPropsToSet, bodyPropsToSet);
+                    FileLogger.Log($"CreateDummyCharacter: Called BodyPropertyRange.Init() with body properties");
 
-                        // Use TaleWorlds.Core.FaceGen call with RACE argument
-                        var newBp = TaleWorlds.Core.FaceGen.GetRandomBodyProperties(
-                             character.Race, // RACE arg first
-                             wanderer.IsFemale,
-                             mn,
-                             mx,
-                             0, // HairCoverType.None
-                             (int)DateTime.Now.Ticks,
-                             "", "", "",
-                             0.1f);
+                    // Set race and gender
+                    character.Race = 0; // Human
+                    character.IsFemale = wanderer.IsFemale;
 
-                        bpField.SetValue(character, newBp);
-                        FileLogger.Log($"Generated random BodyProperties for IsFemale: {wanderer.IsFemale}");
-                    }
+                    // Verify
+                    var verifyBp = character.GetBodyPropertiesMin(false);
+                    FileLogger.Log($"CreateDummyCharacter: Verification - GetBodyPropertiesMin: {verifyBp}");
+                }
+                else
+                {
+                    FileLogger.Log($"CreateDummyCharacter: ERROR - BodyPropertyRange is still null after creation attempt");
                 }
             }
             catch (Exception ex)
             {
-                FileLogger.Log($"Error setting BodyProperties: {ex.Message}");
+                FileLogger.Log($"Error setting BodyProperties on CharacterObject: {ex.Message}");
+                FileLogger.Log($"Stack: {ex.StackTrace}");
             }
 
             return character;
@@ -708,15 +724,54 @@ namespace BannerlordExpanded.WandererCreator.Controllers
 
         private void HandleExportMod(WandererProject project)
         {
-            try
+            _form?.Invoke(new Action(() =>
             {
-                string path = ModExporter.Export(project);
-                MessageBox.Show($"Mod Exported to: {path}");
-            }
-            catch (Exception ex)
+                using (var fbd = new FolderBrowserDialog())
+                {
+                    fbd.Description = "Select Export Destination (e.g. Game's Modules Folder)";
+
+                    // Attempt to default to Modules folder if running from bin/Win64_Shipping_Client
+                    string potentialModules = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "../../Modules"));
+                    if (Directory.Exists(potentialModules))
+                        fbd.SelectedPath = potentialModules;
+                    else if (Directory.Exists(Environment.CurrentDirectory))
+                        fbd.SelectedPath = Environment.CurrentDirectory;
+
+                    if (fbd.ShowDialog() == DialogResult.OK && !string.IsNullOrWhiteSpace(fbd.SelectedPath))
+                    {
+                        try
+                        {
+                            string path = ModExporter.Export(project, fbd.SelectedPath);
+                            MessageBox.Show($"Mod Exported to: {path}", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            System.Diagnostics.Process.Start("explorer.exe", path);
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"Export Failed: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                    }
+                }
+            }));
+        }
+        private List<string> GetSkillIdsFromGame()
+        {
+            var list = new List<string>();
+            var skills = Game.Current.ObjectManager.GetObjectTypeList<SkillObject>();
+            foreach (var s in skills)
             {
-                MessageBox.Show($"Export Failed: {ex.Message}");
+                list.Add(s.StringId);
             }
+            return list;
+        }
+        private List<string> GetTraitIdsFromGame()
+        {
+            var list = new List<string>();
+            var traits = Game.Current.ObjectManager.GetObjectTypeList<TraitObject>();
+            foreach (var t in traits)
+            {
+                list.Add(t.StringId);
+            }
+            return list;
         }
     }
 }

@@ -11,18 +11,21 @@ namespace BannerlordExpanded.WandererCreator.Models
         public string Name { get; set; } = "New Wanderer";
         public string Culture { get; set; } = "Empire";
         public bool IsFemale { get; set; } = false;
+        public string Voice { get; set; } = "curt";
         public int Age { get; set; } = 22;
+        public string DefaultGroup { get; set; } = "Infantry";
+        public string SkillTemplate { get; set; } = "";
+        public string TraitTemplate { get; set; } = "";
 
         // This will hold the BodyProperties code string
         public string BodyPropertiesString { get; set; } = "";
 
         // Dictionary of TraitId -> Value (e.g. "Honor" -> 1, "Mercy" -> -1)
-        public Dictionary<string, int> Traits { get; set; } = new Dictionary<string, int>();
-        public Dictionary<string, int> Skills { get; set; } = new Dictionary<string, int>();
+
+
 
         // Custom Equipment Sets (Legacy/Override)
-        public Dictionary<string, string> EquipmentBattle { get; set; } = new Dictionary<string, string>();
-        public Dictionary<string, string> EquipmentCivilian { get; set; } = new Dictionary<string, string>();
+
 
         // New Template System References
         public List<string> CivilianTemplateIds { get; set; } = new List<string>(); // If empty and EquipmentCivilian has items, use that?
@@ -31,14 +34,9 @@ namespace BannerlordExpanded.WandererCreator.Models
         public List<string> BattleTemplateIds { get; set; } = new List<string>(); // If empty, use EquipmentBattle
 
         // Legacy/Fallback Property
-        public Dictionary<string, string> Equipment
-        {
-            get => EquipmentBattle;
-            set => EquipmentBattle = value;
-        }
 
-        public string CivilianTemplate { get; set; } = "NPCCharacter.villager_empire";
-        public string BattleTemplate { get; set; } = "NPCCharacter.villager_empire";
+
+
 
         // Dialogs
         public WandererDialogData Dialogs { get; set; } = new WandererDialogData();
@@ -84,6 +82,22 @@ namespace BannerlordExpanded.WandererCreator.Models
     }
 
     [Serializable]
+    public class SkillTemplate
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string Name { get; set; } = "New Skill Template";
+        public Dictionary<string, int> Skills { get; set; } = new Dictionary<string, int>();
+    }
+
+    [Serializable]
+    public class TraitTemplate
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string Name { get; set; } = "New Trait Template";
+        public Dictionary<string, int> Traits { get; set; } = new Dictionary<string, int>();
+    }
+
+    [Serializable]
     public class WandererProject
     {
         public string ProjectName { get; set; } = "MyWandererMod";
@@ -91,6 +105,8 @@ namespace BannerlordExpanded.WandererCreator.Models
         public string Version { get; set; } = "1.0.0";
         public List<WandererDefinition> Wanderers { get; set; } = new List<WandererDefinition>();
         public List<EquipmentTemplate> SharedTemplates { get; set; } = new List<EquipmentTemplate>();
+        public List<SkillTemplate> SharedSkillTemplates { get; set; } = new List<SkillTemplate>();
+        public List<TraitTemplate> SharedTraitTemplates { get; set; } = new List<TraitTemplate>();
     }
 }
 

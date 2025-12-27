@@ -1,4 +1,5 @@
 ﻿using TaleWorlds.MountAndBlade;
+using BannerlordExpanded.WandererCreator.VersionCompatibility;
 using System;
 
 
@@ -46,6 +47,9 @@ namespace BannerlordExpanded.WandererCreator
             {
                 FileLogger.Log($"Failed to apply Harmony patches: {ex.Message}");
             }
+
+            // Log version compatibility status
+            VersionCheck.LogVersionStatus();
         }
 
         protected override void OnSubModuleUnloaded()

@@ -1,12 +1,9 @@
 using System;
-using System.Collections.Generic;
-using System.Reflection;
-using System.Linq;
-using TaleWorlds.MountAndBlade;
+using BannerlordExpanded.WandererCreator.VersionCompatibility;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.Core;
-using TaleWorlds.Library;
+using TaleWorlds.MountAndBlade;
 
 namespace BannerlordExpanded.WandererCreator.GameStates
 {
@@ -38,19 +35,14 @@ namespace BannerlordExpanded.WandererCreator.GameStates
                     break;
                 case GameManagerLoadingSteps.PostInitializeFourthState:
                     bool flag = true;
-                    // Reflection to access internal SubModules list
-                    var field = typeof(TaleWorlds.MountAndBlade.Module).GetField("_submodules", BindingFlags.Instance | BindingFlags.NonPublic);
-                    if (field != null)
+                    // Get submodules list using GameApiWrapper
+                    if (GameApiWrapper.TryGetSubmodules(TaleWorlds.MountAndBlade.Module.CurrentModule, out var subModules) && subModules != null)
                     {
-                        var subModules = field.GetValue(TaleWorlds.MountAndBlade.Module.CurrentModule) as System.Collections.IEnumerable;
-                        if (subModules != null)
+                        foreach (var item in subModules)
                         {
-                            foreach (var item in subModules)
+                            if (item is MBSubModuleBase subModule)
                             {
-                                if (item is MBSubModuleBase subModule)
-                                {
-                                    flag = (flag && subModule.DoLoading(Game.Current));
-                                }
+                                flag = (flag && subModule.DoLoading(Game.Current));
                             }
                         }
                     }
@@ -100,10 +92,7 @@ namespace BannerlordExpanded.WandererCreator.GameStates
             try
             {
                 // First, ensure Campaign.PlayerDefaultFaction is set (required for Clan.PlayerClan)
-                // This is internal so we use reflection
-                var playerFactionProp = typeof(Campaign).GetProperty("PlayerDefaultFaction",
-                    BindingFlags.NonPublic | BindingFlags.Instance);
-                if (playerFactionProp != null && Campaign.Current != null)
+                if (Campaign.Current != null)
                 {
                     var existingClan = Campaign.Current.CampaignObjectManager.Find<Clan>("player_faction");
                     if (existingClan == null)
@@ -121,35 +110,31 @@ namespace BannerlordExpanded.WandererCreator.GameStates
 
                     if (existingClan != null)
                     {
-                        playerFactionProp.SetValue(Campaign.Current, existingClan);
-                        FileLogger.Log($"Set Campaign.PlayerDefaultFaction to: {existingClan.StringId}");
+                        if (GameApiWrapper.TrySetPlayerDefaultFaction(Campaign.Current, existingClan))
+                            FileLogger.Log($"Set Campaign.PlayerDefaultFaction to: {existingClan.StringId}");
+                        else
+                            FileLogger.Log("Warning: Failed to set PlayerDefaultFaction via GameApiWrapper");
                     }
                     else
                     {
                         FileLogger.Log("Warning: No clan found for PlayerDefaultFaction");
                     }
                 }
-                else
-                {
-                    FileLogger.Log("Warning: Could not find PlayerDefaultFaction property");
-                }
 
                 // Use a vanilla character template instead of custom one
                 var editorCharacter = CharacterObject.Find("villager_empire");
                 if (editorCharacter != null && Hero.MainHero != null)
                 {
-                    // SetCharacterObject is private, use reflection
-                    var setCharMethod = typeof(Hero).GetMethod("SetCharacterObject",
-                        BindingFlags.NonPublic | BindingFlags.Instance);
-                    if (setCharMethod != null)
-                    {
-                        setCharMethod.Invoke(Hero.MainHero, new object[] { editorCharacter });
+                    // SetCharacterObject is private, use GameApiWrapper
+                    if (GameApiWrapper.TrySetCharacterObject(Hero.MainHero, editorCharacter))
                         FileLogger.Log($"Set Hero.MainHero to: {editorCharacter.StringId}");
-                    }
                     else
-                    {
-                        FileLogger.Log("Warning: SetCharacterObject method not found");
-                    }
+                        FileLogger.Log("Warning: Failed to set CharacterObject via GameApiWrapper");
+
+                    // CRITICAL: Set Game.Current.PlayerTroop so that IsPlayerCharacter returns true
+                    // Without this, UpdatePlayerCharacterBodyProperties silently skips saving FaceGen edits!
+                    Game.Current.PlayerTroop = Hero.MainHero.CharacterObject;
+                    FileLogger.Log($"Set Game.Current.PlayerTroop to: {Hero.MainHero.CharacterObject?.StringId}");
 
                     // Set all skills to 300 (like TroopDesigner does)
                     try
@@ -257,46 +242,13 @@ namespace BannerlordExpanded.WandererCreator.GameStates
                         FileLogger.Log("Found BarberScreen, attempting to clean up its 3D scene...");
                         try
                         {
-                            // Get the _facegenLayer field via reflection
-                            var facegenLayerField = topScreen.GetType().GetField("_facegenLayer",
-                                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                            if (facegenLayerField != null)
+                            // Get and cleanup the facegen layer using GameApiWrapper
+                            if (GameApiWrapper.TryGetFaceGenLayer(topScreen, out var facegenLayer) && facegenLayer != null)
                             {
-                                var facegenLayer = facegenLayerField.GetValue(topScreen);
-                                if (facegenLayer != null)
-                                {
-                                    // Try to get SceneLayer and disable it
-                                    var sceneLayerProp = facegenLayer.GetType().GetProperty("SceneLayer");
-                                    if (sceneLayerProp != null)
-                                    {
-                                        var sceneLayer = sceneLayerProp.GetValue(facegenLayer);
-                                        if (sceneLayer != null)
-                                        {
-                                            var sceneViewProp = sceneLayer.GetType().GetProperty("SceneView");
-                                            if (sceneViewProp != null)
-                                            {
-                                                var sceneView = sceneViewProp.GetValue(sceneLayer);
-                                                if (sceneView != null)
-                                                {
-                                                    var setEnableMethod = sceneView.GetType().GetMethod("SetEnable");
-                                                    if (setEnableMethod != null)
-                                                    {
-                                                        setEnableMethod.Invoke(sceneView, new object[] { false });
-                                                        FileLogger.Log("Disabled BarberScreen SceneView");
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Call OnFinalize on facegenLayer
-                                    var onFinalizeMethod = facegenLayer.GetType().GetMethod("OnFinalize");
-                                    if (onFinalizeMethod != null)
-                                    {
-                                        onFinalizeMethod.Invoke(facegenLayer, null);
-                                        FileLogger.Log("Called OnFinalize on facegenLayer");
-                                    }
-                                }
+                                if (GameApiWrapper.TryCleanupFaceGenLayer(facegenLayer))
+                                    FileLogger.Log("Cleaned up BarberScreen FaceGen layer");
+                                else
+                                    FileLogger.Log("Warning: FaceGen layer cleanup incomplete");
                             }
                         }
                         catch (Exception cleanupEx)

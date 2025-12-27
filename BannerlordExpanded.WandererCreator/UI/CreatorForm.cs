@@ -1,11 +1,11 @@
+using BannerlordExpanded.WandererCreator.Models;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Windows.Forms;
-using BannerlordExpanded.WandererCreator.Models;
-using Newtonsoft.Json;
 using System.IO;
 using System.Linq;
+using System.Windows.Forms;
 
 namespace BannerlordExpanded.WandererCreator.UI
 {
@@ -14,8 +14,14 @@ namespace BannerlordExpanded.WandererCreator.UI
         private MenuStrip _menuStrip;
         private ListBox _wandererList;
         private TextBox _nameBox;
+        private TextBox? _idBox; // New ID Field
         private ComboBox _cultureBox;
         private CheckBox _isFemaleBox;
+        private TextBox? _ageBox;
+        private ComboBox? _defaultGroupBox;
+        private TextBox? _skillTemplateDisplay; // Replaces ComboBox
+        private TextBox? _voiceBox;
+        private TextBox? _bodyKeyBox; // FaceGen
         private Button _editAppearanceBtn;
         private Button _saveBtn;
         private Button _exportBtn;
@@ -45,6 +51,7 @@ namespace BannerlordExpanded.WandererCreator.UI
         private TextBox? _txtResponse1;
         private TextBox? _txtResponse2;
         private TextBox? _costBox;
+        private TextBox? _traitTemplateDisplay;
 
         private RadioButton? _rbBattle;
         private RadioButton? _rbCivilian;
@@ -83,6 +90,16 @@ namespace BannerlordExpanded.WandererCreator.UI
             var tabShared = new TabPage("Shared Equipment Templates");
             SetupSharedTemplatesTab(tabShared);
             _mainTabControl.TabPages.Add(tabShared);
+
+            // 3. SHARED SKILL TEMPLATE TAB
+            var tabSharedSkills = new TabPage("Shared Skill Templates");
+            SetupSharedSkillTemplatesTab(tabSharedSkills);
+            _mainTabControl.TabPages.Add(tabSharedSkills);
+
+            // 4. SHARED TRAIT TEMPLATE TAB
+            var tabSharedTraits = new TabPage("Shared Trait Templates");
+            SetupSharedTraitTemplatesTab(tabSharedTraits);
+            _mainTabControl.TabPages.Add(tabSharedTraits);
 
             // Panel for Main Tabs to separate from Menu and Bottom Buttons
             // Bottom Actions (Added first so it docks to Bottom correctly)
@@ -207,8 +224,15 @@ namespace BannerlordExpanded.WandererCreator.UI
         {
             int labelX = 20;
             int inputX = 150;
-            int y = 40;
+            int y = 20;
 
+            // ID Field
+            var lblId = new Label() { Text = "ID:", Left = labelX, Top = y, AutoSize = true };
+            _idBox = new TextBox() { Left = inputX, Top = y, Width = 250 };
+            _idBox.TextChanged += (s, e) => { if (SelectedWanderer != null) SelectedWanderer.Id = _idBox.Text; };
+            tab.Controls.Add(lblId); tab.Controls.Add(_idBox);
+
+            y += 40;
             var lblName = new Label() { Text = "Name:", Left = labelX, Top = y, AutoSize = true };
             _nameBox = new TextBox() { Left = inputX, Top = y, Width = 250 };
             _nameBox.TextChanged += (s, e) => { if (SelectedWanderer != null) { SelectedWanderer.Name = _nameBox.Text; _wandererList.Refresh(); } };
@@ -226,13 +250,117 @@ namespace BannerlordExpanded.WandererCreator.UI
             _isFemaleBox.CheckedChanged += (s, e) => { if (SelectedWanderer != null) SelectedWanderer.IsFemale = _isFemaleBox.Checked; };
             tab.Controls.Add(_isFemaleBox);
 
-            y += 80;
+            y += 40;
+            var lblVoice = new Label() { Text = "Voice:", Left = labelX, Top = y, AutoSize = true };
+            _voiceBox = new TextBox() { Left = inputX, Top = y, Width = 250, ReadOnly = true, BackColor = SystemColors.Control };
+            // _voiceBox.SelectedIndexChanged += (s, e) => { if (SelectedWanderer != null && _voiceBox.SelectedItem != null) SelectedWanderer.Voice = _voiceBox.SelectedItem.ToString(); };
+            tab.Controls.Add(lblVoice); tab.Controls.Add(_voiceBox);
+
+            y += 40;
+            var lblAge = new Label() { Text = "Age:", Left = labelX, Top = y, AutoSize = true };
+            _ageBox = new TextBox() { Left = inputX, Top = y, Width = 100 };
+            _ageBox.TextChanged += (s, e) => { if (SelectedWanderer != null && int.TryParse(_ageBox.Text, out int age)) SelectedWanderer.Age = age; };
+            tab.Controls.Add(lblAge); tab.Controls.Add(_ageBox);
+
+            y += 40;
+            var lblGroup = new Label() { Text = "Default Group:", Left = labelX, Top = y, AutoSize = true };
+            _defaultGroupBox = new ComboBox() { Left = inputX, Top = y, Width = 250, DropDownStyle = ComboBoxStyle.DropDownList };
+            _defaultGroupBox.Items.AddRange(new object[] { "Infantry", "Ranged", "Cavalry", "HorseArcher" });
+            _defaultGroupBox.SelectedIndexChanged += (s, e) => { if (SelectedWanderer != null && _defaultGroupBox.SelectedItem != null) SelectedWanderer.DefaultGroup = _defaultGroupBox.SelectedItem.ToString(); };
+            tab.Controls.Add(lblGroup); tab.Controls.Add(_defaultGroupBox);
+
+            y += 40;
+            var lblSkill = new Label() { Text = "Skill Template:", Left = labelX, Top = y, AutoSize = true };
+            _skillTemplateDisplay = new TextBox() { Left = inputX, Top = y, Width = 180, ReadOnly = true };
+            var btnSetSkill = new Button() { Text = "Set...", Left = inputX + 190, Top = y - 2, Width = 60, Height = 25 };
+            btnSetSkill.Click += (s, e) => PromptSetSkillTemplate();
+            tab.Controls.Add(lblSkill); tab.Controls.Add(_skillTemplateDisplay); tab.Controls.Add(btnSetSkill);
+
+            y += 40;
+            var lblTrait = new Label() { Text = "Trait Template:", Left = labelX, Top = y, AutoSize = true };
+            _traitTemplateDisplay = new TextBox() { Left = inputX, Top = y, Width = 180, ReadOnly = true };
+            var btnSetTrait = new Button() { Text = "Set...", Left = inputX + 190, Top = y - 2, Width = 60, Height = 25 };
+            btnSetTrait.Click += (s, e) => { if (SelectedWanderer != null) PromptSetTraitTemplate(); };
+            tab.Controls.Add(lblTrait); tab.Controls.Add(_traitTemplateDisplay); tab.Controls.Add(btnSetTrait);
+
+            y += 40;
+            var lblBody = new Label() { Text = "Body Key:", Left = labelX, Top = y, AutoSize = true };
+            _bodyKeyBox = new TextBox() { Left = inputX, Top = y, Width = 250, Height = 50, Multiline = true, ScrollBars = ScrollBars.Vertical, ReadOnly = true };
+            // Read-Only as requested.
+            _bodyKeyBox.TextChanged += (s, e) => { if (SelectedWanderer != null) SelectedWanderer.BodyPropertiesString = _bodyKeyBox.Text; };
+            tab.Controls.Add(lblBody); tab.Controls.Add(_bodyKeyBox);
+
+            y += 60;
             _editAppearanceBtn = new Button() { Text = "Edit Appearance (In-Game)", Left = inputX, Top = y, Width = 250, Height = 50 };
             _editAppearanceBtn.Click += (s, e) => { if (SelectedWanderer != null) OnEditAppearanceRequest?.Invoke(SelectedWanderer); };
             tab.Controls.Add(_editAppearanceBtn);
         }
 
+        private void PromptSetSkillTemplate()
+        {
+            if (Project == null || SelectedWanderer == null) return;
+            var f = new Form() { Text = "Set Skill Template", Width = 400, Height = 250, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false };
+
+            var rbShared = new RadioButton() { Text = "Use Shared Template", Left = 20, Top = 20, AutoSize = true, Checked = true };
+            var cbTemplates = new ComboBox() { Left = 40, Top = 45, Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
+            cbTemplates.DataSource = Project.SharedSkillTemplates;
+            cbTemplates.DisplayMember = "Name";
+
+            var rbCustom = new RadioButton() { Text = "Create New Template", Left = 20, Top = 80, AutoSize = true };
+            var lblId = new Label() { Text = "New ID:", Left = 40, Top = 105, AutoSize = true };
+            var txtId = new TextBox() { Text = "skill_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), Left = 110, Top = 100, Width = 230 };
+
+            var rbClear = new RadioButton() { Text = "Clear (No Template)", Left = 20, Top = 135, AutoSize = true };
+
+            var btnOk = new Button() { Text = "OK", Left = 200, Top = 170, Width = 80, DialogResult = DialogResult.OK };
+            var btnCancel = new Button() { Text = "Cancel", Left = 290, Top = 170, Width = 80, DialogResult = DialogResult.Cancel };
+
+            f.Controls.Add(rbShared); f.Controls.Add(cbTemplates);
+            f.Controls.Add(rbCustom); f.Controls.Add(lblId); f.Controls.Add(txtId);
+            f.Controls.Add(rbClear);
+            f.Controls.Add(btnOk); f.Controls.Add(btnCancel);
+
+            rbShared.CheckedChanged += (s, e) => { cbTemplates.Enabled = rbShared.Checked; txtId.Enabled = !rbShared.Checked; };
+            rbCustom.CheckedChanged += (s, e) => { cbTemplates.Enabled = !rbCustom.Checked; txtId.Enabled = rbCustom.Checked; };
+            rbClear.CheckedChanged += (s, e) => { if (rbClear.Checked) { cbTemplates.Enabled = false; txtId.Enabled = false; } };
+
+            cbTemplates.Enabled = true; txtId.Enabled = false;
+
+            if (f.ShowDialog() == DialogResult.OK)
+            {
+                if (rbShared.Checked)
+                {
+                    if (cbTemplates.SelectedItem is SkillTemplate t)
+                        SelectedWanderer.SkillTemplate = t.Id;
+                }
+                else if (rbCustom.Checked)
+                {
+                    string rawId = txtId.Text;
+                    if (!string.IsNullOrWhiteSpace(rawId))
+                    {
+                        var newT = new SkillTemplate() { Id = rawId, Name = rawId };
+                        Project.SharedSkillTemplates.Add(newT);
+                        SelectedWanderer.SkillTemplate = newT.Id;
+                        RefreshSkillTemplateList();
+
+                        // Auto-open editor
+                        PromptEditSkills(newT);
+                    }
+                }
+                else if (rbClear.Checked)
+                {
+                    SelectedWanderer.SkillTemplate = "";
+                }
+
+                // Update Display
+                if (_skillTemplateDisplay != null)
+                    _skillTemplateDisplay.Text = SelectedWanderer.SkillTemplate;
+            }
+        }
+
         private ListBox? _templateList;
+        private ListBox? _skillTemplateList;
+        private ListBox? _traitTemplateList;
         private ListBox? _battleSetsList;
         private ListBox? _civSetsList;
 
@@ -436,6 +564,324 @@ namespace BannerlordExpanded.WandererCreator.UI
             tab.Controls.Add(split);
         }
 
+        private void SetupSharedSkillTemplatesTab(TabPage tab)
+        {
+            var split = new SplitContainer() { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, FixedPanel = FixedPanel.Panel1 };
+            split.Width = 1000;
+            split.SplitterDistance = 400;
+
+            // Left: List
+            var leftPanel = new Panel() { Dock = DockStyle.Fill, Padding = new Padding(10) };
+            var tlpLeft = new TableLayoutPanel() { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+            tlpLeft.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            tlpLeft.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            var lblTitle = new Label() { Text = "Skill Templates:", Dock = DockStyle.Fill, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold), TextAlign = ContentAlignment.BottomLeft };
+            _skillTemplateList = new ListBox() { Dock = DockStyle.Fill };
+            _skillTemplateList.DisplayMember = "Name";
+
+            tlpLeft.Controls.Add(lblTitle, 0, 0);
+            tlpLeft.Controls.Add(_skillTemplateList, 0, 1);
+            leftPanel.Controls.Add(tlpLeft);
+
+            // Right: Buttons
+            var rightPanel = new FlowLayoutPanel() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(20) };
+
+            var btnCreate = new Button() { Text = "Create New Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
+            btnCreate.Click += (s, e) => PromptGenericText("New Skill Template ID", "skill_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) => AddSkillTemplate(id));
+
+            var btnDelete = new Button() { Text = "Delete Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
+            btnDelete.Click += (s, e) => RemoveSkillTemplate();
+
+            var btnEdit = new Button() { Text = "Edit Skills", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
+            btnEdit.Click += (s, e) =>
+            {
+                if (_skillTemplateList != null && _skillTemplateList.SelectedItem is SkillTemplate t) PromptEditSkills(t);
+            };
+
+            rightPanel.Controls.Add(btnCreate);
+            rightPanel.Controls.Add(btnDelete);
+            rightPanel.Controls.Add(btnEdit);
+
+            split.Panel1.Controls.Add(leftPanel);
+            split.Panel2.Controls.Add(rightPanel);
+            tab.Controls.Add(split);
+        }
+
+        private void AddSkillTemplate(string id)
+        {
+            if (Project == null) return;
+            var t = new SkillTemplate() { Id = id, Name = id };
+            Project.SharedSkillTemplates.Add(t);
+            RefreshSkillTemplateList();
+        }
+
+        private void AddTraitTemplate(string id)
+        {
+            if (Project == null) return;
+            var t = new TraitTemplate() { Id = id, Name = id };
+            Project.SharedTraitTemplates.Add(t);
+            RefreshTraitTemplateList();
+            if (_traitTemplateList != null)
+            {
+                _traitTemplateList.SelectedItem = t;
+                PromptEditTraitTemplate(t);
+            }
+        }
+
+        private void RemoveSkillTemplate()
+        {
+            if (_skillTemplateList != null && _skillTemplateList.SelectedItem is SkillTemplate t)
+            {
+                Project?.SharedSkillTemplates.Remove(t);
+                RefreshSkillTemplateList();
+            }
+        }
+
+        private void RefreshSkillTemplateList()
+        {
+            if (_skillTemplateList == null) return;
+            _skillTemplateList.DataSource = null;
+            if (Project != null)
+            {
+                _skillTemplateList.DataSource = Project.SharedSkillTemplates;
+                _skillTemplateList.DisplayMember = "Name";
+            }
+        }
+
+        public List<string> AvailableSkills { get; set; } = new List<string>();
+        public List<string> AvailableTraits { get; set; } = new List<string>();
+
+
+        private void PromptEditSkills(SkillTemplate template)
+        {
+            var f = new Form() { Text = "Edit Skills: " + template.Name, Width = 500, Height = 600, StartPosition = FormStartPosition.CenterParent };
+
+            var grid = new DataGridView() { Dock = DockStyle.Fill, AutoGenerateColumns = false };
+
+            grid.Columns.Clear();
+
+            // Dropdown for Skills
+            var colId = new DataGridViewComboBoxColumn() { Name = "SkillId", HeaderText = "Skill ID", Width = 250 };
+
+            if (AvailableSkills != null && AvailableSkills.Count > 0)
+            {
+                colId.Items.AddRange(AvailableSkills.ToArray());
+            }
+            else
+            {
+                // Fallback
+                MessageBox.Show("Warning: Could not fetch skill list from the game.\nUsing hardcoded fallback list. Please let the mod author know about this.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                colId.Items.AddRange(new object[] {
+                    "OneHanded", "TwoHanded", "Polearm", "Bow", "Crossbow", "Throwing",
+                    "Riding", "Athletics", "Smithing",
+                    "Scouting", "Tactics", "Roguary", "Charm", "Leadership", "Trade", "Steward", "Medicine", "Engineering"
+                });
+            }
+
+            colId.DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox;
+            colId.FlatStyle = FlatStyle.Flat;
+
+            var colVal = new DataGridViewTextBoxColumn() { Name = "Level", HeaderText = "Level (1-300)", Width = 100 };
+            grid.Columns.Add(colId); grid.Columns.Add(colVal);
+
+            foreach (var kv in template.Skills)
+            {
+                grid.Rows.Add(kv.Key, kv.Value);
+            }
+
+            var pnlBottom = new Panel() { Dock = DockStyle.Bottom, Height = 50 };
+            var btnSave = new Button() { Text = "Save", Left = 380, Top = 10, DialogResult = DialogResult.OK };
+            pnlBottom.Controls.Add(btnSave);
+            f.AcceptButton = btnSave;
+
+            f.Controls.Add(grid);
+            f.Controls.Add(pnlBottom);
+
+            if (f.ShowDialog() == DialogResult.OK)
+            {
+                template.Skills.Clear();
+                foreach (DataGridViewRow row in grid.Rows)
+                {
+                    if (row.IsNewRow) continue;
+                    string id = row.Cells[0].Value?.ToString() ?? "";
+                    string valStr = row.Cells[1].Value?.ToString() ?? "0";
+                    if (!string.IsNullOrWhiteSpace(id) && int.TryParse(valStr, out int val))
+                    {
+                        template.Skills[id] = val;
+                    }
+                }
+            }
+        }
+
+        private void SetupSharedTraitTemplatesTab(TabPage tab)
+        {
+            var split = new SplitContainer() { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, FixedPanel = FixedPanel.Panel1 };
+            split.Width = 1000;
+            split.SplitterDistance = 400;
+
+            // Left: List
+            var leftPanel = new Panel() { Dock = DockStyle.Fill, Padding = new Padding(10) };
+            var tlpLeft = new TableLayoutPanel() { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+            tlpLeft.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            tlpLeft.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            var lblTitle = new Label() { Text = "Trait Templates:", Dock = DockStyle.Fill, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold), TextAlign = ContentAlignment.BottomLeft };
+            _traitTemplateList = new ListBox() { Dock = DockStyle.Fill, DisplayMember = "Name" };
+
+            tlpLeft.Controls.Add(lblTitle, 0, 0);
+            tlpLeft.Controls.Add(_traitTemplateList, 0, 1);
+            leftPanel.Controls.Add(tlpLeft);
+
+            // Right: Buttons
+            var rightPanel = new FlowLayoutPanel() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(20) };
+
+            var btnCreate = new Button() { Text = "Create New Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
+            btnCreate.Click += (s, e) => PromptGenericText("New Trait Template ID", "trait_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) => AddTraitTemplate(id));
+
+            var btnDelete = new Button() { Text = "Delete Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
+            btnDelete.Click += (s, e) =>
+            {
+                if (_traitTemplateList != null && _traitTemplateList.SelectedItem is TraitTemplate t && Project != null)
+                {
+                    Project.SharedTraitTemplates.Remove(t);
+                    ((CurrencyManager)BindingContext[Project.SharedTraitTemplates]).Refresh();
+                    RefreshTraitTemplateList();
+                }
+            };
+
+            var btnEdit = new Button() { Text = "Edit Traits", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
+            btnEdit.Click += (s, e) =>
+            {
+                if (_traitTemplateList != null && _traitTemplateList.SelectedItem is TraitTemplate t) PromptEditTraitTemplate(t);
+            };
+
+            rightPanel.Controls.Add(btnCreate);
+            rightPanel.Controls.Add(btnDelete);
+            rightPanel.Controls.Add(btnEdit);
+
+            split.Panel1.Controls.Add(leftPanel);
+            split.Panel2.Controls.Add(rightPanel);
+            tab.Controls.Add(split);
+        }
+
+        private void PromptSetTraitTemplate()
+        {
+            if (Project == null || SelectedWanderer == null) return;
+            var f = new Form() { Text = "Set Trait Template", Width = 400, Height = 250, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false };
+
+            var rbShared = new RadioButton() { Text = "Use Shared Template", Left = 20, Top = 20, AutoSize = true, Checked = true };
+            var cbTemplates = new ComboBox() { Left = 40, Top = 45, Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
+            cbTemplates.DataSource = Project.SharedTraitTemplates;
+            cbTemplates.DisplayMember = "Name";
+
+            var rbCustom = new RadioButton() { Text = "Create New Template", Left = 20, Top = 80, AutoSize = true };
+            var lblId = new Label() { Text = "New ID:", Left = 40, Top = 105, AutoSize = true };
+            var txtId = new TextBox() { Text = "trait_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), Left = 110, Top = 100, Width = 230 };
+
+            var rbClear = new RadioButton() { Text = "Clear (No Template)", Left = 20, Top = 135, AutoSize = true };
+
+            var btnOk = new Button() { Text = "OK", Left = 200, Top = 170, Width = 80, DialogResult = DialogResult.OK };
+            var btnCancel = new Button() { Text = "Cancel", Left = 290, Top = 170, Width = 80, DialogResult = DialogResult.Cancel };
+
+            f.Controls.Add(rbShared); f.Controls.Add(cbTemplates);
+            f.Controls.Add(rbCustom); f.Controls.Add(lblId); f.Controls.Add(txtId);
+            f.Controls.Add(rbClear);
+            f.Controls.Add(btnOk); f.Controls.Add(btnCancel);
+            f.AcceptButton = btnOk; f.CancelButton = btnCancel;
+
+            if (f.ShowDialog() == DialogResult.OK)
+            {
+                if (rbShared.Checked)
+                {
+                    if (cbTemplates.SelectedItem is TraitTemplate t)
+                        SelectedWanderer.TraitTemplate = t.Id;
+                }
+                else if (rbCustom.Checked)
+                {
+                    var result = txtId.Text.Trim();
+                    if (!string.IsNullOrEmpty(result))
+                    {
+                        var t = new TraitTemplate() { Id = result, Name = result };
+                        Project.SharedTraitTemplates.Add(t);
+                        SelectedWanderer.TraitTemplate = t.Id;
+
+                        RefreshTraitTemplateList();
+                        PromptEditTraitTemplate(t);
+                    }
+                }
+                else if (rbClear.Checked)
+                {
+                    SelectedWanderer.TraitTemplate = "";
+                }
+                // Update text display
+                UpdateTraitTemplateDisplay();
+            }
+        }
+        private void UpdateTraitTemplateDisplay()
+        {
+            if (SelectedWanderer == null || Project == null)
+            {
+                if (_traitTemplateDisplay != null) _traitTemplateDisplay.Text = "";
+                return;
+            }
+            if (string.IsNullOrEmpty(SelectedWanderer.TraitTemplate))
+            {
+                if (_traitTemplateDisplay != null) _traitTemplateDisplay.Text = "(None)";
+            }
+            else
+            {
+                var t = Project.SharedTraitTemplates.FirstOrDefault(x => x.Id == SelectedWanderer.TraitTemplate);
+                if (_traitTemplateDisplay != null)
+                    _traitTemplateDisplay.Text = t != null ? t.Name : SelectedWanderer.TraitTemplate;
+            }
+        }
+
+        private void PromptEditTraitTemplate(TraitTemplate template)
+        {
+            var f = new Form() { Text = "Edit Template: " + template.Name, Width = 400, Height = 500, StartPosition = FormStartPosition.CenterParent };
+            var grid = new DataGridView() { Dock = DockStyle.Fill, AutoGenerateColumns = false };
+
+            var colId = new DataGridViewComboBoxColumn() { Name = "TraitId", HeaderText = "Trait ID", Width = 200 };
+            if (AvailableTraits != null && AvailableTraits.Count > 0)
+                colId.Items.AddRange(AvailableTraits.ToArray());
+            else
+                colId.Items.AddRange(new object[] { "Mercy", "Valor", "Honor", "Generosity", "Calculating" });
+
+            colId.DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox;
+            colId.FlatStyle = FlatStyle.Flat;
+
+            var colVal = new DataGridViewTextBoxColumn() { Name = "Value", HeaderText = "Value", Width = 100 };
+            grid.Columns.Add(colId); grid.Columns.Add(colVal);
+
+            foreach (var kv in template.Traits)
+            {
+                grid.Rows.Add(kv.Key, kv.Value);
+            }
+
+            var pnlBottom = new Panel() { Dock = DockStyle.Bottom, Height = 50 };
+            var btnSave = new Button() { Text = "Save", Left = 280, Top = 10, DialogResult = DialogResult.OK };
+            pnlBottom.Controls.Add(btnSave);
+            f.AcceptButton = btnSave;
+            f.Controls.Add(grid);
+            f.Controls.Add(pnlBottom);
+
+            if (f.ShowDialog() == DialogResult.OK)
+            {
+                template.Traits.Clear();
+                foreach (DataGridViewRow row in grid.Rows)
+                {
+                    if (row.IsNewRow) continue;
+                    string id = row.Cells[0].Value?.ToString();
+                    string valStr = row.Cells[1].Value?.ToString();
+                    if (!string.IsNullOrEmpty(id) && int.TryParse(valStr, out int val))
+                    {
+                        template.Traits[id] = val;
+                    }
+                }
+            }
+        }
+
         private void SetupDialogsTab(TabPage tab)
         {
             tab.AutoScroll = true; // Enable scrolling for many fields
@@ -559,16 +1005,51 @@ namespace BannerlordExpanded.WandererCreator.UI
 
         private void AddWanderer() { if (Project == null) return; var w = new WandererDefinition() { Name = "New Wanderer" }; Project.Wanderers.Add(w); RefreshList(); SelectWanderer(w); }
         private void RemoveWanderer() { if (SelectedWanderer != null && Project != null) { Project.Wanderers.Remove(SelectedWanderer); SelectedWanderer = null; RefreshList(); ResetInputs(); } }
-        private void RefreshList() { _wandererList.DataSource = null; if (Project != null) { _wandererList.DataSource = Project.Wanderers; _wandererList.DisplayMember = "Name"; } }
-        private void ResetInputs() { if (_nameBox != null) _nameBox.Text = ""; if (_cultureBox != null) _cultureBox.SelectedIndex = -1; if (_isFemaleBox != null) _isFemaleBox.Checked = false; if (_txtIntro != null) _txtIntro.Text = ""; }
+        private void RefreshList()
+        {
+            _wandererList.DataSource = null;
+            RefreshTemplateList();
+            RefreshSkillTemplateList();
+            RefreshTraitTemplateList();
+            if (Project != null) { _wandererList.DataSource = Project.Wanderers; _wandererList.DisplayMember = "Name"; }
+        }
+        private void RefreshTraitTemplateList()
+        {
+            if (_traitTemplateList == null) return;
+            _traitTemplateList.DataSource = null;
+            if (Project != null) { _traitTemplateList.DataSource = Project.SharedTraitTemplates; _traitTemplateList.DisplayMember = "Name"; }
+        }
+        private void ResetInputs()
+        {
+            if (_nameBox != null) _nameBox.Text = "";
+            if (_idBox != null) _idBox.Text = "";
+            if (_cultureBox != null) _cultureBox.SelectedIndex = -1;
+            if (_isFemaleBox != null) _isFemaleBox.Checked = false;
+            if (_voiceBox != null) _voiceBox.Text = "";
+            if (_ageBox != null) _ageBox.Text = "22";
+            if (_defaultGroupBox != null) _defaultGroupBox.SelectedIndex = -1;
+            if (_skillTemplateDisplay != null) _skillTemplateDisplay.Text = "";
+            if (_bodyKeyBox != null) _bodyKeyBox.Text = "";
+            if (_txtIntro != null) _txtIntro.Text = "";
+        }
 
         public void SelectWanderer(WandererDefinition? w)
         {
             SelectedWanderer = w;
             if (w == null) { ResetInputs(); return; }
             if (_nameBox != null) _nameBox.Text = w.Name;
+            if (_idBox != null) _idBox.Text = w.Id;
             if (_cultureBox != null) _cultureBox.SelectedItem = w.Culture;
             if (_isFemaleBox != null) _isFemaleBox.Checked = w.IsFemale;
+            if (_voiceBox != null) _voiceBox.Text = w.Voice;
+            if (_ageBox != null) _ageBox.Text = w.Age.ToString();
+            if (_defaultGroupBox != null) _defaultGroupBox.SelectedItem = w.DefaultGroup;
+            if (_bodyKeyBox != null) _bodyKeyBox.Text = w.BodyPropertiesString;
+
+            if (_skillTemplateDisplay != null)
+            {
+                _skillTemplateDisplay.Text = w.SkillTemplate;
+            }
 
             if (_txtIntro != null) _txtIntro.Text = w.Dialogs.Intro;
             if (_txtBackstoryA != null) _txtBackstoryA.Text = w.Dialogs.LifeStory;
@@ -581,6 +1062,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             if (_costBox != null) _costBox.Text = w.Dialogs.Cost;
 
             RefreshWandererEquipmentUI();
+            UpdateTraitTemplateDisplay();
         }
     }
 }
