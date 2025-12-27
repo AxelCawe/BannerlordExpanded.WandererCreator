@@ -1,5 +1,5 @@
-using System;
 using BannerlordExpanded.WandererCreator.VersionCompatibility;
+using System;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.Core;
@@ -203,31 +203,10 @@ namespace BannerlordExpanded.WandererCreator.GameStates
             {
                 FileLogger.Log("BarberState popped. Returning to editor form...");
 
-                // Try to get the edited BodyProperties
-                // This may fail if the character state was cleared, but that's okay
-                string bodyPropsString = "";
-                try
-                {
-                    var character = barberState.Character;
-                    if (character != null)
-                    {
-                        var bodyProps = character.GetBodyPropertiesMin(false);
-                        bodyPropsString = bodyProps.ToString();
-                        FileLogger.Log($"Got BodyProperties: {bodyPropsString}");
-                    }
-                    else
-                    {
-                        FileLogger.Log("Note: barberState.Character was null (this is normal if character wasn't modified)");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    FileLogger.Log($"Note: Could not get BodyProperties (this is normal): {ex.Message}");
-                }
 
                 // Notify controller with whatever we got (may be empty)
                 var controller = BannerlordExpanded.WandererCreator.Controllers.EditorController.Instance;
-                controller?.OnFaceGenComplete(bodyPropsString);
+                controller?.OnFaceGenComplete();
 
                 // Clean up BarberScreen properly before returning to editor
                 try

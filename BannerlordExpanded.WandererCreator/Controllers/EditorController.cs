@@ -1,17 +1,16 @@
-using BannerlordExpanded.WandererCreator.VersionCompatibility;
 using BannerlordExpanded.WandererCreator.Models;
 using BannerlordExpanded.WandererCreator.Services;
 using BannerlordExpanded.WandererCreator.UI;
+using BannerlordExpanded.WandererCreator.VersionCompatibility;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
 using TaleWorlds.CampaignSystem;
-using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
 using TaleWorlds.ObjectSystem;
@@ -122,6 +121,8 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             _formThread.Start();
         }
 
+        // Store reference to the dummy character passed to FaceGen (so we can read from it on pop)
+        private CharacterObject? _currentFaceGenCharacter;
         private void HandleEditAppearance(WandererDefinition wanderer)
         {
             FileLogger.Log("HandleEditAppearance called");
@@ -242,18 +243,13 @@ namespace BannerlordExpanded.WandererCreator.Controllers
 
         // Store reference to the wanderer currently being edited (for FaceGen callback)
         private WandererDefinition? _currentEditingWanderer;
-        // Store reference to the dummy character passed to FaceGen (so we can read from it on pop)
-        private CharacterObject? _currentFaceGenCharacter;
+
 
         /// <summary>
         /// Called by CreatorGameManager when BarberState is popped (user clicked Done in FaceGen)
         /// </summary>
-        public void OnFaceGenComplete(string newBodyPropertiesString)
+        public void OnFaceGenComplete()
         {
-            FileLogger.Log($"OnFaceGenComplete called. Callback arg (likely empty): '{newBodyPropertiesString}'");
-
-            // FIX: Read BodyProperties from Hero.MainHero, not the CharacterObject!
-            // FaceGen (BarberState) modifies the Hero's BodyProperties, not the CharacterObject.
             string actualBp = "";
             try
             {
@@ -270,26 +266,19 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             if (_currentEditingWanderer != null && !string.IsNullOrEmpty(actualBp))
             {
                 _currentEditingWanderer.BodyPropertiesString = actualBp;
-                FileLogger.Log($"Updated BodyProperties for wanderer: {_currentEditingWanderer.Name}");
 
-                // Update Voice
-                try
+                // Get voice/persona from the BodyProperties (FaceGen voice selection)
+                if (GameApiWrapper.TryGetPersonaFromBodyProperties(Hero.MainHero, out string personaId))
                 {
-                    // Use standard character object
-                    var charObj = Hero.MainHero.CharacterObject;
-                    if (charObj != null)
-                    {
-                        if (GameApiWrapper.TryGetVoice(charObj, out string voiceId))
-                        {
-                            _currentEditingWanderer.Voice = voiceId;
-                            FileLogger.Log($"Updated Voice for wanderer: {voiceId}");
-                        }
-                    }
+                    _currentEditingWanderer.Voice = personaId;
+                    FileLogger.Log($"Updated Voice to '{personaId}' from BodyProperties");
                 }
-                catch (Exception ex)
+                else
                 {
-                    FileLogger.Log($"Error reading VoiceObject: {ex.Message}");
+                    MessageBox.Show("Could not get Voice from BodyProperties. Mod is broken! Report to mod author ASAP!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
+
+                FileLogger.Log($"Updated BodyProperties for wanderer: {_currentEditingWanderer.Name}");
             }
 
             // refresh UI

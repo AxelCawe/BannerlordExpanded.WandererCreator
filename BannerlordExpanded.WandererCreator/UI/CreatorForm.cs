@@ -20,7 +20,7 @@ namespace BannerlordExpanded.WandererCreator.UI
         private TextBox? _ageBox;
         private ComboBox? _defaultGroupBox;
         private TextBox? _skillTemplateDisplay; // Replaces ComboBox
-        private TextBox? _voiceBox;
+
         private TextBox? _bodyKeyBox; // FaceGen
         private Button _editAppearanceBtn;
         private Button _saveBtn;
@@ -250,11 +250,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             _isFemaleBox.CheckedChanged += (s, e) => { if (SelectedWanderer != null) SelectedWanderer.IsFemale = _isFemaleBox.Checked; };
             tab.Controls.Add(_isFemaleBox);
 
-            y += 40;
-            var lblVoice = new Label() { Text = "Voice:", Left = labelX, Top = y, AutoSize = true };
-            _voiceBox = new TextBox() { Left = inputX, Top = y, Width = 250, ReadOnly = true, BackColor = SystemColors.Control };
-            // _voiceBox.SelectedIndexChanged += (s, e) => { if (SelectedWanderer != null && _voiceBox.SelectedItem != null) SelectedWanderer.Voice = _voiceBox.SelectedItem.ToString(); };
-            tab.Controls.Add(lblVoice); tab.Controls.Add(_voiceBox);
+
 
             y += 40;
             var lblAge = new Label() { Text = "Age:", Left = labelX, Top = y, AutoSize = true };
@@ -1025,7 +1021,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             if (_idBox != null) _idBox.Text = "";
             if (_cultureBox != null) _cultureBox.SelectedIndex = -1;
             if (_isFemaleBox != null) _isFemaleBox.Checked = false;
-            if (_voiceBox != null) _voiceBox.Text = "";
+
             if (_ageBox != null) _ageBox.Text = "22";
             if (_defaultGroupBox != null) _defaultGroupBox.SelectedIndex = -1;
             if (_skillTemplateDisplay != null) _skillTemplateDisplay.Text = "";
@@ -1041,7 +1037,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             if (_idBox != null) _idBox.Text = w.Id;
             if (_cultureBox != null) _cultureBox.SelectedItem = w.Culture;
             if (_isFemaleBox != null) _isFemaleBox.Checked = w.IsFemale;
-            if (_voiceBox != null) _voiceBox.Text = w.Voice;
+
             if (_ageBox != null) _ageBox.Text = w.Age.ToString();
             if (_defaultGroupBox != null) _defaultGroupBox.SelectedItem = w.DefaultGroup;
             if (_bodyKeyBox != null) _bodyKeyBox.Text = w.BodyPropertiesString;

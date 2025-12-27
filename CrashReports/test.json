@@ -8,15 +8,40 @@
       "Name": "New Wanderer",
       "Culture": "Empire",
       "IsFemale": true,
-      "Voice": "curt",
+      "Voice": "softspoken",
       "Age": 22,
       "DefaultGroup": "Infantry",
       "SkillTemplate": "skill_template_21d603c7",
       "TraitTemplate": "trait_template_2848e4e8",
-      "BodyPropertiesString": "<BodyProperties version=\"4\" age=\"22.19\" weight=\"0.4626\" build=\"0.5244\"  key=\"000DC00C40003018116072448984015CA30AF91581210119E203C302C7A290C90078700307FE284000000000000000000000000000000000000000003AF000C0\"  />",
+      "BodyPropertiesString": "<BodyProperties version=\"4\" age=\"22.26\" weight=\"0.4626\" build=\"0.5244\"  key=\"003CC00C40003018116072448984015CA30AF91581210119E203C302C7A290C90078700307FE284000000000000000000000000000000000000000003AF000C4\"  />",
       "CivilianTemplateIds": [
         "eq_civ_custom_9df28cbc-e82f-4ccc-a257-201adceb6bda_6a5e"
       ],
+      "BattleTemplateIds": [],
+      "Dialogs": {
+        "Intro": "{=!}Hello there. I am a wanderer.",
+        "LifeStory": "{=!}I have seen many things...",
+        "LifeStoryB": "{=!}...",
+        "LifeStoryC": "{=!}...",
+        "Recruitment": "{=!}I can join you for a price.",
+        "GenericBackstory": "{=!}A wandering warrior.",
+        "Response1": "{=!}Most interesting. Go on.",
+        "Response2": "{=!}I have heard enough.",
+        "Cost": "500"
+      }
+    },
+    {
+      "Id": "cb689410-63f4-4171-8f3a-5c487eae2249",
+      "Name": "New Wanderer 2",
+      "Culture": "Empire",
+      "IsFemale": true,
+      "Voice": "softspoken",
+      "Age": 22,
+      "DefaultGroup": "Infantry",
+      "SkillTemplate": "",
+      "TraitTemplate": "",
+      "BodyPropertiesString": "<BodyProperties version=\"4\" age=\"22.26\" weight=\"0.4352\" build=\"0.5008\"  key=\"000ACC0B8000000F116081438984816AC30CE81571210119D203C302B89290E90068700306EF2840000000000000000000000000000000000000000054D800C2\"  />",
+      "CivilianTemplateIds": [],
       "BattleTemplateIds": [],
       "Dialogs": {
         "Intro": "{=!}Hello there. I am a wanderer.",

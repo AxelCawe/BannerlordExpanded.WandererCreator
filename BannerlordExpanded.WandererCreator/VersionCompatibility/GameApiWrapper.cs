@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using BannerlordExpanded.WandererCreator.Helpers;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.Core;
+using TaleWorlds.MountAndBlade;
 using TaleWorlds.ObjectSystem;
 
 namespace BannerlordExpanded.WandererCreator.VersionCompatibility
@@ -111,29 +114,98 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
             return ReflectionHelper.TrySetField(character, new[] { "_name", "_basicName" }, name);
         }
 
+
+
         /// <summary>
-        /// Tries to get the voice string ID from a character.
+        /// Tries to get the voice string ID from a character using GetPersona().
         /// </summary>
         public static bool TryGetVoice(BasicCharacterObject character, out string voiceId)
         {
             voiceId = "";
             if (character == null) return false;
 
-            // _persona is a private field in CharacterObject (which inherits from BasicCharacterObject)
-            // It holds a TraitObject
-            object? personaObj = null;
-            if (ReflectionHelper.TryGetField(character, new[] { "_persona" }, out personaObj))
+            try
             {
-                if (personaObj != null)
+                // Try to cast to CharacterObject (CampaignSystem)
+                if (character is CharacterObject charObj)
                 {
-                    // TraitObject has StringId (via MBObjectBase)
-                    if (ReflectionHelper.TryGetProperty(personaObj, new[] { "StringId" }, out object? sId) && sId != null)
+                    // Direct access since GetPersona is public
+                    var traitObj = charObj.GetPersona();
+                    if (traitObj != null)
                     {
-                        voiceId = sId.ToString();
+                        voiceId = traitObj.StringId;
                         return true;
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"[GameApiWrapper] Error getting voice: {ex.Message}");
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Tries to get the FaceGen voice index from BodyProperties.
+        /// This is the audio voice preset (0, 1, 2, etc.) encoded in the body properties.
+        /// </summary>
+        public static bool TryGetFaceGenVoiceIndex(BodyProperties bodyProperties, out int voiceIndex)
+        {
+            voiceIndex = 0;
+            try
+            {
+                FaceGenerationParams faceGenParams = FaceGenerationParams.Create();
+                MBBodyProperties.GetParamsFromKey(ref faceGenParams, bodyProperties, false, false);
+                voiceIndex = faceGenParams.CurrentVoice;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"[GameApiWrapper] Error getting FaceGen voice index: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Maps a FaceGen voice index to a persona string ID.
+        /// Voice indices are gender-dependent and map to different audio presets.
+        /// Index 0 = curt, 1 = earnest, 2 = ironic, 3 = softspoken (approximate mapping)
+        /// </summary>
+        public static string GetPersonaFromVoiceIndex(int voiceIndex, bool isFemale)
+        {
+            // The game has different voice counts per gender/race/age.
+            // This is an approximate mapping based on the 4 persona types.
+            // Voice indices cycle through available voices.
+            string[] personaIds = { "curt", "earnest", "ironic", "softspoken" };
+
+            // Wrap the index to the available personas
+            int personaIndex = voiceIndex % personaIds.Length;
+            return personaIds[personaIndex];
+        }
+
+        /// <summary>
+        /// Gets the persona string ID from a Hero's BodyProperties.
+        /// Combines TryGetFaceGenVoiceIndex and GetPersonaFromVoiceIndex.
+        /// </summary>
+        public static bool TryGetPersonaFromBodyProperties(Hero hero, out string personaId)
+        {
+            personaId = "curt"; // Default
+            if (hero == null) return false;
+
+            try
+            {
+                if (TryGetFaceGenVoiceIndex(hero.BodyProperties, out int voiceIndex))
+                {
+                    personaId = GetPersonaFromVoiceIndex(voiceIndex, hero.IsFemale);
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"[GameApiWrapper] Error getting persona from body properties: {ex.Message}");
+            }
+
             return false;
         }
 
