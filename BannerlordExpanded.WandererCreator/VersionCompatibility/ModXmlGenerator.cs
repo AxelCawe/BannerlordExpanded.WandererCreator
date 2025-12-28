@@ -33,13 +33,38 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
                     writer.WriteAttributeString("culture", "Culture." + w.Culture.ToLower());
                     writer.WriteAttributeString("occupation", "Wanderer");
 
-                    // Face
-                    writer.WriteStartElement("face");
-                    if (!string.IsNullOrEmpty(w.BodyPropertiesString))
+                    // Face - resolve body properties from template or direct values
+                    string bodyPropsMin = "";
+                    string bodyPropsMax = "";
+
+                    // Check if wanderer uses a body template
+                    if (!string.IsNullOrEmpty(w.BodyPropertiesTemplateId))
                     {
-                        writer.WriteStartElement("face_key_template");
-                        writer.WriteAttributeString("value", w.BodyPropertiesString);
-                        writer.WriteEndElement();
+                        var bodyTemplate = project.SharedBodyPropertiesTemplates.FirstOrDefault(t => t.Id == w.BodyPropertiesTemplateId);
+                        if (bodyTemplate != null)
+                        {
+                            bodyPropsMin = bodyTemplate.BodyPropertiesString;
+                            bodyPropsMax = !string.IsNullOrEmpty(bodyTemplate.BodyPropertiesMaxString)
+                                ? bodyTemplate.BodyPropertiesMaxString
+                                : bodyTemplate.BodyPropertiesString;
+                        }
+                    }
+                    else
+                    {
+                        // Use direct values
+                        bodyPropsMin = w.BodyPropertiesString;
+                        bodyPropsMax = !string.IsNullOrEmpty(w.BodyPropertiesMaxString)
+                            ? w.BodyPropertiesMaxString
+                            : w.BodyPropertiesString;
+                    }
+
+                    writer.WriteStartElement("face");
+                    if (!string.IsNullOrEmpty(bodyPropsMin))
+                    {
+                        // Write BodyProperties element
+                        WriteBodyPropertiesElement(writer, "BodyProperties", bodyPropsMin, w.Age);
+                        // Write BodyPropertiesMax element
+                        WriteBodyPropertiesElement(writer, "BodyPropertiesMax", bodyPropsMax, w.Age);
                     }
                     writer.WriteEndElement();
 
@@ -209,6 +234,60 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
                 writer.WriteAttributeString("id", kvp.Value);
                 writer.WriteEndElement();
             }
+            writer.WriteEndElement();
+        }
+
+        /// <summary>
+        /// Writes a BodyProperties or BodyPropertiesMax XML element with all required attributes.
+        /// Parses the body string to extract version, age, weight, build, and key values.
+        /// </summary>
+        private static void WriteBodyPropertiesElement(XmlWriter writer, string elementName, string bodyPropertiesString, int wandererAge)
+        {
+            // BodyProperties string format from game: 
+            // "<BodyProperties version=\"4\" age=\"22.79\" weight=\"0.5\" build=\"0.5\" key=\"0000040C80004001...\" />"
+            // We need to parse this and output individual attributes
+
+            writer.WriteStartElement(elementName);
+
+            // Try to parse the body properties string if it looks like XML
+            if (bodyPropertiesString.Trim().StartsWith("<"))
+            {
+                try
+                {
+                    // Parse the XML snippet to extract attributes
+                    var doc = new System.Xml.XmlDocument();
+                    doc.LoadXml(bodyPropertiesString);
+                    var root = doc.DocumentElement;
+
+                    if (root != null)
+                    {
+                        // Copy all attributes from the parsed element
+                        foreach (System.Xml.XmlAttribute attr in root.Attributes)
+                        {
+                            writer.WriteAttributeString(attr.Name, attr.Value);
+                        }
+                    }
+                }
+                catch
+                {
+                    // If parsing fails, write as key with defaults
+                    writer.WriteAttributeString("version", "4");
+                    writer.WriteAttributeString("age", wandererAge.ToString("F2"));
+                    writer.WriteAttributeString("weight", "0.5");
+                    writer.WriteAttributeString("build", "0.5");
+                    writer.WriteAttributeString("key", bodyPropertiesString);
+                }
+            }
+            else
+            {
+                // Plain key string - wrap with default attributes
+                writer.WriteAttributeString("version", "4");
+                writer.WriteAttributeString("age", wandererAge.ToString("F2"));
+                writer.WriteAttributeString("weight", "0.5");
+                writer.WriteAttributeString("build", "0.5");
+                writer.WriteAttributeString("key", bodyPropertiesString);
+            }
+
             writer.WriteEndElement();
         }
     }

@@ -21,8 +21,6 @@ namespace BannerlordExpanded.WandererCreator.UI
         private ComboBox? _defaultGroupBox;
         private TextBox? _skillTemplateDisplay; // Replaces ComboBox
 
-        private TextBox? _bodyKeyBox; // FaceGen
-        private Button _editAppearanceBtn;
         private Button _saveBtn;
         private Button _exportBtn;
         private Button _addWandererBtn;
@@ -32,12 +30,18 @@ namespace BannerlordExpanded.WandererCreator.UI
         private TabControl? _mainTabControl;
         private TabControl? _wandererDetailTabControl;
 
+        // Project Info Fields
+        private TextBox? _projectIdBox;
+        private TextBox? _projectNameBox;
+        private TextBox? _projectVersionBox;
+        private TextBox? _projectUrlBox;
+
         public WandererProject Project { get; private set; }
         public WandererDefinition SelectedWanderer { get; private set; }
 
-        public event Action<WandererDefinition>? OnEditAppearanceRequest;
         public event Action<WandererDefinition, bool>? OnEditEquipmentRequest; // Legacy
         public event Action<EquipmentTemplate>? OnEditTemplateRequest;
+        public event Action<BodyPropertiesTemplate, bool>? OnEditBodyTemplateRequest; // Edit body template (bool = isEditingMax)
         public event Action<WandererProject>? OnSaveRequest;
         public event Action<WandererProject>? OnExportRequest;
 
@@ -52,6 +56,7 @@ namespace BannerlordExpanded.WandererCreator.UI
         private TextBox? _txtResponse2;
         private TextBox? _costBox;
         private TextBox? _traitTemplateDisplay;
+        private TextBox? _bodyTemplateDisplay;
 
         private RadioButton? _rbBattle;
         private RadioButton? _rbCivilian;
@@ -81,8 +86,13 @@ namespace BannerlordExpanded.WandererCreator.UI
             // MAIN TAB CONTROL (Root Layer)
             _mainTabControl = new TabControl() { Dock = DockStyle.Fill, Padding = new Point(10, 5) };
 
+            // 0. PROJECT INFO TAB (First Tab)
+            var tabProjectInfo = new TabPage("Project Info");
+            SetupProjectInfoTab(tabProjectInfo);
+            _mainTabControl.TabPages.Add(tabProjectInfo);
+
             // 1. WANDERER EDITOR TAB
-            var tabWandererEditor = new TabPage("Wanderer Editor");
+            var tabWandererEditor = new TabPage("Wanderers");
             SetupWandererEditorTab(tabWandererEditor);
             _mainTabControl.TabPages.Add(tabWandererEditor);
 
@@ -100,6 +110,11 @@ namespace BannerlordExpanded.WandererCreator.UI
             var tabSharedTraits = new TabPage("Shared Trait Templates");
             SetupSharedTraitTemplatesTab(tabSharedTraits);
             _mainTabControl.TabPages.Add(tabSharedTraits);
+
+            // 5. SHARED BODY TEMPLATES TAB
+            var tabSharedBody = new TabPage("Shared Body Templates");
+            SetupSharedBodyTemplatesTab(tabSharedBody);
+            _mainTabControl.TabPages.Add(tabSharedBody);
 
             // Panel for Main Tabs to separate from Menu and Bottom Buttons
             // Bottom Actions (Added first so it docks to Bottom correctly)
@@ -119,6 +134,62 @@ namespace BannerlordExpanded.WandererCreator.UI
             mainPanel.Controls.Add(_mainTabControl);
             this.Controls.Add(mainPanel);
             mainPanel.BringToFront();
+        }
+
+        private void SetupProjectInfoTab(TabPage tab)
+        {
+            int labelX = 20;
+            int inputX = 150;
+            int y = 30;
+            int inputWidth = 350;
+
+            // Module ID Field
+            var lblId = new Label() { Text = "Module ID:", Left = labelX, Top = y, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold) };
+            _projectIdBox = new TextBox() { Left = inputX, Top = y, Width = inputWidth };
+            _projectIdBox.TextChanged += (s, e) => { if (Project != null) Project.ModuleId = _projectIdBox.Text; };
+            var lblIdHint = new Label() { Text = "(Unique identifier, no spaces)", Left = inputX + inputWidth + 10, Top = y, AutoSize = true, ForeColor = Color.Gray };
+            tab.Controls.Add(lblId); tab.Controls.Add(_projectIdBox); tab.Controls.Add(lblIdHint);
+
+            y += 50;
+            // Project Name Field
+            var lblName = new Label() { Text = "Project Name:", Left = labelX, Top = y, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold) };
+            _projectNameBox = new TextBox() { Left = inputX, Top = y, Width = inputWidth };
+            _projectNameBox.TextChanged += (s, e) => { if (Project != null) Project.ProjectName = _projectNameBox.Text; };
+            var lblNameHint = new Label() { Text = "(Display name for the mod)", Left = inputX + inputWidth + 10, Top = y, AutoSize = true, ForeColor = Color.Gray };
+            tab.Controls.Add(lblName); tab.Controls.Add(_projectNameBox); tab.Controls.Add(lblNameHint);
+
+            y += 50;
+            // Version Field
+            var lblVersion = new Label() { Text = "Version:", Left = labelX, Top = y, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold) };
+            _projectVersionBox = new TextBox() { Left = inputX, Top = y, Width = 150 };
+            _projectVersionBox.TextChanged += (s, e) => { if (Project != null) Project.Version = _projectVersionBox.Text; };
+            var lblVersionHint = new Label() { Text = "(e.g., 1.0.0)", Left = inputX + 160, Top = y, AutoSize = true, ForeColor = Color.Gray };
+            tab.Controls.Add(lblVersion); tab.Controls.Add(_projectVersionBox); tab.Controls.Add(lblVersionHint);
+
+            y += 50;
+            // URL Field
+            var lblUrl = new Label() { Text = "Project URL:", Left = labelX, Top = y, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold) };
+            _projectUrlBox = new TextBox() { Left = inputX, Top = y, Width = inputWidth };
+            _projectUrlBox.TextChanged += (s, e) => { if (Project != null) Project.Url = _projectUrlBox.Text; };
+            var lblUrlHint = new Label() { Text = "(Optional, e.g., Nexus Mods page)", Left = inputX + inputWidth + 10, Top = y, AutoSize = true, ForeColor = Color.Gray };
+            tab.Controls.Add(lblUrl); tab.Controls.Add(_projectUrlBox); tab.Controls.Add(lblUrlHint);
+
+            y += 80;
+            // Info Panel
+            var infoLabel = new Label()
+            {
+                Text = "These settings are used when exporting your mod to SubModule.xml.\n\n" +
+                       "• Module ID: A unique identifier for your mod (no spaces or special characters)\n" +
+                       "• Project Name: The display name shown in the game's mod launcher\n" +
+                       "• Version: The version number of your mod\n" +
+                       "• Project URL: An optional link to your mod page (Nexus, ModDB, etc.)",
+                Left = labelX,
+                Top = y,
+                Width = 600,
+                Height = 120,
+                ForeColor = Color.DarkSlateGray
+            };
+            tab.Controls.Add(infoLabel);
         }
 
         private void SetupWandererEditorTab(TabPage tab)
@@ -280,16 +351,11 @@ namespace BannerlordExpanded.WandererCreator.UI
             tab.Controls.Add(lblTrait); tab.Controls.Add(_traitTemplateDisplay); tab.Controls.Add(btnSetTrait);
 
             y += 40;
-            var lblBody = new Label() { Text = "Body Key:", Left = labelX, Top = y, AutoSize = true };
-            _bodyKeyBox = new TextBox() { Left = inputX, Top = y, Width = 250, Height = 50, Multiline = true, ScrollBars = ScrollBars.Vertical, ReadOnly = true };
-            // Read-Only as requested.
-            _bodyKeyBox.TextChanged += (s, e) => { if (SelectedWanderer != null) SelectedWanderer.BodyPropertiesString = _bodyKeyBox.Text; };
-            tab.Controls.Add(lblBody); tab.Controls.Add(_bodyKeyBox);
-
-            y += 60;
-            _editAppearanceBtn = new Button() { Text = "Edit Appearance (In-Game)", Left = inputX, Top = y, Width = 250, Height = 50 };
-            _editAppearanceBtn.Click += (s, e) => { if (SelectedWanderer != null) OnEditAppearanceRequest?.Invoke(SelectedWanderer); };
-            tab.Controls.Add(_editAppearanceBtn);
+            var lblBodyTemplate = new Label() { Text = "Body Template:", Left = labelX, Top = y, AutoSize = true };
+            _bodyTemplateDisplay = new TextBox() { Left = inputX, Top = y, Width = 180, ReadOnly = true };
+            var btnSetBody = new Button() { Text = "Set...", Left = inputX + 190, Top = y - 2, Width = 60, Height = 25 };
+            btnSetBody.Click += (s, e) => { if (SelectedWanderer != null) PromptSetBodyTemplate(); };
+            tab.Controls.Add(lblBodyTemplate); tab.Controls.Add(_bodyTemplateDisplay); tab.Controls.Add(btnSetBody);
         }
 
         private void PromptSetSkillTemplate()
@@ -357,6 +423,7 @@ namespace BannerlordExpanded.WandererCreator.UI
         private ListBox? _templateList;
         private ListBox? _skillTemplateList;
         private ListBox? _traitTemplateList;
+        private ListBox? _bodyTemplateList;
         private ListBox? _battleSetsList;
         private ListBox? _civSetsList;
 
@@ -761,6 +828,269 @@ namespace BannerlordExpanded.WandererCreator.UI
             tab.Controls.Add(split);
         }
 
+        private void SetupSharedBodyTemplatesTab(TabPage tab)
+        {
+            var split = new SplitContainer() { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, FixedPanel = FixedPanel.Panel1 };
+            split.Width = 1000;
+            split.SplitterDistance = 300;
+
+            // Left: List
+            var leftPanel = new Panel() { Dock = DockStyle.Fill, Padding = new Padding(10) };
+            var tlpLeft = new TableLayoutPanel() { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+            tlpLeft.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            tlpLeft.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            var lblTitle = new Label() { Text = "Body Templates:", Dock = DockStyle.Fill, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold), TextAlign = ContentAlignment.BottomLeft };
+            _bodyTemplateList = new ListBox() { Dock = DockStyle.Fill, DisplayMember = "Name" };
+            _bodyTemplateList.SelectedIndexChanged += (s, e) => UpdateBodyTemplateDetails();
+
+            tlpLeft.Controls.Add(lblTitle, 0, 0);
+            tlpLeft.Controls.Add(_bodyTemplateList, 0, 1);
+            leftPanel.Controls.Add(tlpLeft);
+
+            // Right: Details panel
+            var rightPanel = new Panel() { Dock = DockStyle.Fill, Padding = new Padding(10), AutoScroll = true };
+            int y = 10;
+            int labelX = 10;
+            int inputX = 130;
+
+            // Create/Delete buttons
+            var btnCreate = new Button() { Text = "Create New", Left = labelX, Top = y, Width = 100, Height = 30 };
+            btnCreate.Click += (s, e) => PromptCreateBodyTemplate();
+            rightPanel.Controls.Add(btnCreate);
+
+            var btnDelete = new Button() { Text = "Delete", Left = labelX + 110, Top = y, Width = 80, Height = 30 };
+            btnDelete.Click += (s, e) => RemoveBodyTemplate();
+            rightPanel.Controls.Add(btnDelete);
+
+            y += 45;
+
+            // IsFemale checkbox
+            var lblFemale = new Label() { Text = "Is Female:", Left = labelX, Top = y + 3, AutoSize = true };
+            _bodyTemplateIsFemaleCheckbox = new CheckBox() { Left = inputX, Top = y, AutoSize = true };
+            _bodyTemplateIsFemaleCheckbox.CheckedChanged += (s, e) =>
+            {
+                if (_bodyTemplateList?.SelectedItem is BodyPropertiesTemplate t)
+                {
+                    t.IsFemale = _bodyTemplateIsFemaleCheckbox.Checked;
+                }
+            };
+            rightPanel.Controls.Add(lblFemale);
+            rightPanel.Controls.Add(_bodyTemplateIsFemaleCheckbox);
+
+            y += 35;
+
+            // Body Properties Min
+            var lblMin = new Label() { Text = "Body Min:", Left = labelX, Top = y, AutoSize = true };
+            _bodyTemplateMinBox = new TextBox() { Left = inputX, Top = y, Width = 300, Height = 60, Multiline = true, ScrollBars = ScrollBars.Vertical, ReadOnly = true };
+            var btnEditMin = new Button() { Text = "Edit", Left = inputX + 310, Top = y, Width = 60, Height = 30 };
+            btnEditMin.Click += (s, e) =>
+            {
+                if (_bodyTemplateList?.SelectedItem is BodyPropertiesTemplate t)
+                    OnEditBodyTemplateRequest?.Invoke(t, false);
+                else
+                    MessageBox.Show("Select a template first.");
+            };
+            rightPanel.Controls.Add(lblMin);
+            rightPanel.Controls.Add(_bodyTemplateMinBox);
+            rightPanel.Controls.Add(btnEditMin);
+
+            y += 70;
+
+            // Body Properties Max
+            var lblMax = new Label() { Text = "Body Max:", Left = labelX, Top = y, AutoSize = true };
+            _bodyTemplateMaxBox = new TextBox() { Left = inputX, Top = y, Width = 300, Height = 60, Multiline = true, ScrollBars = ScrollBars.Vertical, ReadOnly = true };
+            var btnEditMax = new Button() { Text = "Edit", Left = inputX + 310, Top = y, Width = 60, Height = 30 };
+            btnEditMax.Click += (s, e) =>
+            {
+                if (_bodyTemplateList?.SelectedItem is BodyPropertiesTemplate t)
+                    OnEditBodyTemplateRequest?.Invoke(t, true);
+                else
+                    MessageBox.Show("Select a template first.");
+            };
+            rightPanel.Controls.Add(lblMax);
+            rightPanel.Controls.Add(_bodyTemplateMaxBox);
+            rightPanel.Controls.Add(btnEditMax);
+
+            split.Panel1.Controls.Add(leftPanel);
+            split.Panel2.Controls.Add(rightPanel);
+            tab.Controls.Add(split);
+        }
+
+        private void UpdateBodyTemplateDetails()
+        {
+            if (_bodyTemplateList?.SelectedItem is BodyPropertiesTemplate t)
+            {
+                if (_bodyTemplateIsFemaleCheckbox != null) _bodyTemplateIsFemaleCheckbox.Checked = t.IsFemale;
+                if (_bodyTemplateMinBox != null) _bodyTemplateMinBox.Text = t.BodyPropertiesString;
+                if (_bodyTemplateMaxBox != null) _bodyTemplateMaxBox.Text = t.BodyPropertiesMaxString;
+            }
+            else
+            {
+                if (_bodyTemplateIsFemaleCheckbox != null) _bodyTemplateIsFemaleCheckbox.Checked = false;
+                if (_bodyTemplateMinBox != null) _bodyTemplateMinBox.Text = "";
+                if (_bodyTemplateMaxBox != null) _bodyTemplateMaxBox.Text = "";
+            }
+        }
+
+        // Body template detail fields
+        private CheckBox? _bodyTemplateIsFemaleCheckbox;
+        private TextBox? _bodyTemplateMinBox;
+        private TextBox? _bodyTemplateMaxBox;
+
+
+        private void AddBodyTemplate(string id, bool isFemale)
+        {
+            if (Project == null) return;
+            var t = new BodyPropertiesTemplate() { Id = id, Name = id, IsFemale = isFemale };
+            Project.SharedBodyPropertiesTemplates.Add(t);
+            RefreshBodyTemplateList();
+            // Select the new template
+            if (_bodyTemplateList != null) _bodyTemplateList.SelectedItem = t;
+        }
+
+        private void PromptCreateBodyTemplate()
+        {
+            var f = new Form() { Text = "Create Body Template", Width = 350, Height = 180, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false };
+
+            var lblId = new Label() { Text = "Template ID:", Left = 20, Top = 20, AutoSize = true };
+            var txtId = new TextBox() { Text = "body_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), Left = 120, Top = 17, Width = 200 };
+
+            var lblGender = new Label() { Text = "Gender:", Left = 20, Top = 55, AutoSize = true };
+            var cbFemale = new CheckBox() { Text = "Female", Left = 120, Top = 52, AutoSize = true };
+
+            var btnOk = new Button() { Text = "OK", Left = 140, Top = 95, Width = 80, DialogResult = DialogResult.OK };
+            var btnCancel = new Button() { Text = "Cancel", Left = 230, Top = 95, Width = 80, DialogResult = DialogResult.Cancel };
+
+            f.Controls.Add(lblId); f.Controls.Add(txtId);
+            f.Controls.Add(lblGender); f.Controls.Add(cbFemale);
+            f.Controls.Add(btnOk); f.Controls.Add(btnCancel);
+
+            if (f.ShowDialog() == DialogResult.OK)
+            {
+                if (!string.IsNullOrWhiteSpace(txtId.Text))
+                {
+                    AddBodyTemplate(txtId.Text, cbFemale.Checked);
+                }
+            }
+        }
+
+        private void RemoveBodyTemplate()
+        {
+            if (_bodyTemplateList != null && _bodyTemplateList.SelectedItem is BodyPropertiesTemplate t)
+            {
+                Project?.SharedBodyPropertiesTemplates.Remove(t);
+                RefreshBodyTemplateList();
+            }
+        }
+
+        public void RefreshBodyTemplateList()
+        {
+            if (_bodyTemplateList == null) return;
+            _bodyTemplateList.DataSource = null;
+            if (Project != null)
+            {
+                _bodyTemplateList.DataSource = Project.SharedBodyPropertiesTemplates;
+                _bodyTemplateList.DisplayMember = "Name";
+            }
+            UpdateBodyTemplateDetails();
+        }
+
+        private void PromptSetBodyTemplate()
+        {
+            if (Project == null || SelectedWanderer == null) return;
+            var f = new Form() { Text = "Set Body Template", Width = 400, Height = 250, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false };
+
+            var rbShared = new RadioButton() { Text = "Use Shared Template", Left = 20, Top = 20, AutoSize = true, Checked = true };
+            var cbTemplates = new ComboBox() { Left = 40, Top = 45, Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
+            // Filter templates by wanderer's gender
+            var filteredTemplates = Project.SharedBodyPropertiesTemplates
+                .Where(t => t.IsFemale == SelectedWanderer.IsFemale)
+                .ToList();
+            cbTemplates.DataSource = filteredTemplates;
+            cbTemplates.DisplayMember = "Name";
+
+            var rbCustom = new RadioButton() { Text = "Create New Template", Left = 20, Top = 80, AutoSize = true };
+            var lblId = new Label() { Text = "New ID:", Left = 40, Top = 105, AutoSize = true };
+            var txtId = new TextBox() { Text = "body_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), Left = 110, Top = 100, Width = 230 };
+
+            var rbClear = new RadioButton() { Text = "Clear (No Template)", Left = 20, Top = 135, AutoSize = true };
+
+            var btnOk = new Button() { Text = "OK", Left = 200, Top = 165, Width = 80, DialogResult = DialogResult.OK };
+            var btnCancel = new Button() { Text = "Cancel", Left = 290, Top = 165, Width = 80, DialogResult = DialogResult.Cancel };
+
+            f.Controls.Add(rbShared); f.Controls.Add(cbTemplates);
+            f.Controls.Add(rbCustom); f.Controls.Add(lblId); f.Controls.Add(txtId);
+            f.Controls.Add(rbClear);
+            f.Controls.Add(btnOk); f.Controls.Add(btnCancel);
+
+            rbShared.CheckedChanged += (s, e) => { cbTemplates.Enabled = rbShared.Checked; txtId.Enabled = false; };
+            rbCustom.CheckedChanged += (s, e) => { cbTemplates.Enabled = false; txtId.Enabled = rbCustom.Checked; };
+            rbClear.CheckedChanged += (s, e) => { cbTemplates.Enabled = false; txtId.Enabled = false; };
+
+            cbTemplates.Enabled = true; txtId.Enabled = false;
+
+            if (f.ShowDialog() == DialogResult.OK)
+            {
+                if (rbShared.Checked)
+                {
+                    if (cbTemplates.SelectedItem is BodyPropertiesTemplate t)
+                    {
+                        SelectedWanderer.BodyPropertiesTemplateId = t.Id;
+                    }
+                }
+                else if (rbCustom.Checked)
+                {
+                    string rawId = txtId.Text;
+                    if (!string.IsNullOrWhiteSpace(rawId))
+                    {
+                        // Auto-set IsFemale to match wanderer's gender
+                        var newT = new BodyPropertiesTemplate() { Id = rawId, Name = rawId, IsFemale = SelectedWanderer.IsFemale };
+                        Project.SharedBodyPropertiesTemplates.Add(newT);
+                        SelectedWanderer.BodyPropertiesTemplateId = newT.Id;
+                        RefreshBodyTemplateList();
+
+                        // Switch to Shared Body Templates tab and select the new template
+                        if (_mainTabControl != null && _bodyTemplateList != null)
+                        {
+                            // Find and switch to the Shared Body Templates tab (index 5)
+                            foreach (TabPage tab in _mainTabControl.TabPages)
+                            {
+                                if (tab.Text == "Shared Body Templates")
+                                {
+                                    _mainTabControl.SelectedTab = tab;
+                                    break;
+                                }
+                            }
+                            // Select the new template in the list
+                            _bodyTemplateList.SelectedItem = newT;
+                        }
+                    }
+                }
+                else if (rbClear.Checked)
+                {
+                    SelectedWanderer.BodyPropertiesTemplateId = "";
+                }
+
+                UpdateBodyTemplateDisplay();
+            }
+        }
+
+        private void UpdateBodyTemplateDisplay()
+        {
+            if (SelectedWanderer == null || _bodyTemplateDisplay == null) return;
+
+            if (!string.IsNullOrEmpty(SelectedWanderer.BodyPropertiesTemplateId))
+            {
+                var template = Project?.SharedBodyPropertiesTemplates.FirstOrDefault(t => t.Id == SelectedWanderer.BodyPropertiesTemplateId);
+                _bodyTemplateDisplay.Text = template?.Name ?? SelectedWanderer.BodyPropertiesTemplateId;
+            }
+            else
+            {
+                _bodyTemplateDisplay.Text = "(None)";
+            }
+        }
+
         private void PromptSetTraitTemplate()
         {
             if (Project == null || SelectedWanderer == null) return;
@@ -1007,6 +1337,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             RefreshTemplateList();
             RefreshSkillTemplateList();
             RefreshTraitTemplateList();
+            RefreshProjectInfo();
             if (Project != null) { _wandererList.DataSource = Project.Wanderers; _wandererList.DisplayMember = "Name"; }
         }
         private void RefreshTraitTemplateList()
@@ -1014,6 +1345,21 @@ namespace BannerlordExpanded.WandererCreator.UI
             if (_traitTemplateList == null) return;
             _traitTemplateList.DataSource = null;
             if (Project != null) { _traitTemplateList.DataSource = Project.SharedTraitTemplates; _traitTemplateList.DisplayMember = "Name"; }
+        }
+        private void RefreshProjectInfo()
+        {
+            if (Project == null)
+            {
+                if (_projectIdBox != null) _projectIdBox.Text = "";
+                if (_projectNameBox != null) _projectNameBox.Text = "";
+                if (_projectVersionBox != null) _projectVersionBox.Text = "";
+                if (_projectUrlBox != null) _projectUrlBox.Text = "";
+                return;
+            }
+            if (_projectIdBox != null) _projectIdBox.Text = Project.ModuleId;
+            if (_projectNameBox != null) _projectNameBox.Text = Project.ProjectName;
+            if (_projectVersionBox != null) _projectVersionBox.Text = Project.Version;
+            if (_projectUrlBox != null) _projectUrlBox.Text = Project.Url;
         }
         private void ResetInputs()
         {
@@ -1025,7 +1371,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             if (_ageBox != null) _ageBox.Text = "22";
             if (_defaultGroupBox != null) _defaultGroupBox.SelectedIndex = -1;
             if (_skillTemplateDisplay != null) _skillTemplateDisplay.Text = "";
-            if (_bodyKeyBox != null) _bodyKeyBox.Text = "";
+            if (_bodyTemplateDisplay != null) _bodyTemplateDisplay.Text = "";
             if (_txtIntro != null) _txtIntro.Text = "";
         }
 
@@ -1040,12 +1386,14 @@ namespace BannerlordExpanded.WandererCreator.UI
 
             if (_ageBox != null) _ageBox.Text = w.Age.ToString();
             if (_defaultGroupBox != null) _defaultGroupBox.SelectedItem = w.DefaultGroup;
-            if (_bodyKeyBox != null) _bodyKeyBox.Text = w.BodyPropertiesString;
 
             if (_skillTemplateDisplay != null)
             {
                 _skillTemplateDisplay.Text = w.SkillTemplate;
             }
+
+            // Update body template display (handles both template and direct values)
+            UpdateBodyTemplateDisplay();
 
             if (_txtIntro != null) _txtIntro.Text = w.Dialogs.Intro;
             if (_txtBackstoryA != null) _txtBackstoryA.Text = w.Dialogs.LifeStory;

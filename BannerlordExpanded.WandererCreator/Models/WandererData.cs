@@ -17,8 +17,14 @@ namespace BannerlordExpanded.WandererCreator.Models
         public string SkillTemplate { get; set; } = "";
         public string TraitTemplate { get; set; } = "";
 
-        // This will hold the BodyProperties code string
+        // This will hold the BodyProperties code string (used if no template assigned)
         public string BodyPropertiesString { get; set; } = "";
+
+        // This holds the BodyPropertiesMax code string (for face variation range)
+        public string BodyPropertiesMaxString { get; set; } = "";
+
+        // Reference to a shared body properties template (if set, overrides direct strings)
+        public string BodyPropertiesTemplateId { get; set; } = "";
 
         // Dictionary of TraitId -> Value (e.g. "Honor" -> 1, "Mercy" -> -1)
 
@@ -98,15 +104,27 @@ namespace BannerlordExpanded.WandererCreator.Models
     }
 
     [Serializable]
+    public class BodyPropertiesTemplate
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string Name { get; set; } = "New Body Template";
+        public bool IsFemale { get; set; } = false;
+        public string BodyPropertiesString { get; set; } = "";
+        public string BodyPropertiesMaxString { get; set; } = "";
+    }
+
+    [Serializable]
     public class WandererProject
     {
         public string ProjectName { get; set; } = "MyWandererMod";
         public string ModuleId { get; set; } = "MyWandererMod";
         public string Version { get; set; } = "1.0.0";
+        public string Url { get; set; } = "";
         public List<WandererDefinition> Wanderers { get; set; } = new List<WandererDefinition>();
         public List<EquipmentTemplate> SharedTemplates { get; set; } = new List<EquipmentTemplate>();
         public List<SkillTemplate> SharedSkillTemplates { get; set; } = new List<SkillTemplate>();
         public List<TraitTemplate> SharedTraitTemplates { get; set; } = new List<TraitTemplate>();
+        public List<BodyPropertiesTemplate> SharedBodyPropertiesTemplates { get; set; } = new List<BodyPropertiesTemplate>();
     }
 }
 

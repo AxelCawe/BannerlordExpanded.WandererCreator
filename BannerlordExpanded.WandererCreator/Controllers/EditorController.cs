@@ -106,8 +106,8 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 // 1. Center the form
                 _form.StartPosition = FormStartPosition.CenterScreen;
 
-                _form.OnEditAppearanceRequest += HandleEditAppearance;
                 _form.OnEditTemplateRequest += HandleEditTemplate; // Fix: Subscribe to template edits
+                _form.OnEditBodyTemplateRequest += HandleEditBodyTemplate; // Body template editing
                 _form.OnSaveRequest += HandleSave;
                 _form.OnExportRequest += HandleExportMod;
 
@@ -123,14 +123,19 @@ namespace BannerlordExpanded.WandererCreator.Controllers
 
         // Store reference to the dummy character passed to FaceGen (so we can read from it on pop)
         private CharacterObject? _currentFaceGenCharacter;
-        private void HandleEditAppearance(WandererDefinition wanderer)
+        // Track if we're editing max appearance (vs min)
+        private bool _isEditingMaxAppearance;
+        // Track if we're editing a body template directly (vs wanderer appearance)
+        private BodyPropertiesTemplate? _currentEditingBodyTemplate;
+        private void HandleEditAppearance(WandererDefinition wanderer, bool isEditingMax)
         {
-            FileLogger.Log("HandleEditAppearance called");
+            FileLogger.Log($"HandleEditAppearance called (isEditingMax: {isEditingMax})");
             FileLogger.Log($"  Wanderer Name: {wanderer.Name}");
             FileLogger.Log($"  BodyPropertiesString: '{wanderer.BodyPropertiesString}'");
             FileLogger.Log($"  BodyPropertiesString IsNullOrEmpty: {string.IsNullOrEmpty(wanderer.BodyPropertiesString)}");
 
             _currentEditingWanderer = wanderer; // Store for later callback
+            _isEditingMaxAppearance = isEditingMax; // Store which property we're editing
             _form.Invoke(new Action(() => _form.Hide()));
 
             try
@@ -158,7 +163,10 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 FileLogger.Log($"Dummy Character created: {dummy.Name} (Race: {dummy.Race}, Monster: {derivedMonster.StringId})");
 
                 // Capture the body properties string for use in the main thread action
-                string bodyPropsString = wanderer.BodyPropertiesString;
+                // Use the correct string based on whether we're editing min or max
+                string bodyPropsString = isEditingMax
+                    ? wanderer.BodyPropertiesMaxString
+                    : wanderer.BodyPropertiesString;
 
                 // Push BarberState via Main Thread
                 SubModule.EnqueueMainThreadAction(() =>
@@ -233,6 +241,92 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             }
         }
 
+        private void HandleEditBodyTemplate(BodyPropertiesTemplate template, bool isEditingMax)
+        {
+            FileLogger.Log($"HandleEditBodyTemplate called (template: {template.Name}, isEditingMax: {isEditingMax})");
+
+            _currentEditingBodyTemplate = template;
+            _currentEditingWanderer = null; // Not editing a wanderer directly
+            _isEditingMaxAppearance = isEditingMax;
+            _form.Invoke(new Action(() => _form.Hide()));
+
+            try
+            {
+                // Use the template's body properties
+                string bodyPropsString = isEditingMax
+                    ? template.BodyPropertiesMaxString
+                    : template.BodyPropertiesString;
+
+                // Push BarberState via Main Thread
+                SubModule.EnqueueMainThreadAction(() =>
+                {
+                    try
+                    {
+                        var heroCharacter = Hero.MainHero.CharacterObject;
+                        if (heroCharacter == null)
+                        {
+                            FileLogger.Log("[MainThread] ERROR: Hero.MainHero.CharacterObject is null!");
+                            return;
+                        }
+
+                        // Set IsFemale first - this affects the visual model displayed
+                        Hero.MainHero.IsFemale = template.IsFemale;
+                        FileLogger.Log($"[MainThread] Set Hero.MainHero.IsFemale = {template.IsFemale}");
+
+                        // Get or generate body properties
+                        TaleWorlds.Core.BodyProperties bodyProps;
+                        if (!string.IsNullOrEmpty(bodyPropsString) &&
+                            TaleWorlds.Core.BodyProperties.FromString(bodyPropsString, out var savedBp))
+                        {
+                            FileLogger.Log($"[MainThread] Loading saved BodyProperties for template");
+                            bodyProps = savedBp;
+                        }
+                        else
+                        {
+                            FileLogger.Log($"[MainThread] Generating new BodyProperties for template (IsFemale: {template.IsFemale})");
+                            var bpMin = heroCharacter.GetBodyPropertiesMin(true);
+                            var bpMax = heroCharacter.GetBodyPropertiesMax(true);
+                            bodyProps = TaleWorlds.Core.FaceGen.GetRandomBodyProperties(
+                                heroCharacter.Race,
+                                template.IsFemale, // Use template's gender setting
+                                bpMin, bpMax,
+                                0,
+                                new Random().Next(),
+                                heroCharacter.BodyPropertyRange?.HairTags ?? "",
+                                heroCharacter.BodyPropertyRange?.BeardTags ?? "",
+                                heroCharacter.BodyPropertyRange?.TattooTags ?? "",
+                                0.1f);
+                        }
+
+                        // Apply body properties to Hero.MainHero
+                        Hero.MainHero.StaticBodyProperties = bodyProps.StaticProperties;
+                        Hero.MainHero.Weight = bodyProps.Weight;
+                        Hero.MainHero.Build = bodyProps.Build;
+
+                        // Ensure BodyPropertyRange exists on CharacterObject
+                        EnsureBodyPropertyRange(heroCharacter);
+                        heroCharacter.BodyPropertyRange?.Init(bodyProps, bodyProps);
+
+                        FileLogger.Log($"[MainThread] Applied BodyProperties for template editing");
+
+                        // Push the FaceGen state
+                        GameStateManager.Current.PushState(
+                            GameStateManager.Current.CreateState<BarberState>(heroCharacter, new FaceGenCustomFilter()));
+                        FileLogger.Log("Pushed BarberState for template editing");
+                    }
+                    catch (Exception ex)
+                    {
+                        FileLogger.Log($"Error in FaceGen setup for template: {ex}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"Error in HandleEditBodyTemplate: {ex}");
+                InformationManager.ShowInquiry(new InquiryData("Error", "Could not open FaceGen.\n" + ex.Message, true, false, "Ok", "", () => OnScreenActivated(), null));
+            }
+        }
+
         /// <summary>
         /// Ensures the given CharacterObject has a BodyPropertyRange. Creates one if null.
         /// </summary>
@@ -262,23 +356,61 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 FileLogger.Log($"Error reading BodyProperties from Hero.MainHero: {ex.Message}");
             }
 
-            // Update the current wanderer's body properties
-            if (_currentEditingWanderer != null && !string.IsNullOrEmpty(actualBp))
+            // Handle body template editing
+            if (_currentEditingBodyTemplate != null && !string.IsNullOrEmpty(actualBp))
             {
-                _currentEditingWanderer.BodyPropertiesString = actualBp;
+                if (_isEditingMaxAppearance)
+                {
+                    _currentEditingBodyTemplate.BodyPropertiesMaxString = actualBp;
+                    FileLogger.Log($"Updated BodyPropertiesMax for template: {_currentEditingBodyTemplate.Name}");
+                }
+                else
+                {
+                    _currentEditingBodyTemplate.BodyPropertiesString = actualBp;
+                    // Auto-copy to max if empty
+                    if (string.IsNullOrEmpty(_currentEditingBodyTemplate.BodyPropertiesMaxString))
+                    {
+                        _currentEditingBodyTemplate.BodyPropertiesMaxString = actualBp;
+                        FileLogger.Log($"Updated BodyPropertiesMax (auto-copied from min)");
+                    }
+                    FileLogger.Log($"Updated BodyPropertiesString for template: {_currentEditingBodyTemplate.Name}");
+                }
 
-                // Get voice/persona from the BodyProperties (FaceGen voice selection)
-                if (GameApiWrapper.TryGetPersonaFromBodyProperties(Hero.MainHero, out string personaId))
+                // Refresh template list
+                _form.Invoke(new Action(() => _form.RefreshBodyTemplateList()));
+                _currentEditingBodyTemplate = null;
+            }
+            // Handle wanderer editing
+            else if (_currentEditingWanderer != null && !string.IsNullOrEmpty(actualBp))
+            {
+                // Save to the correct property based on which button was clicked
+                if (_isEditingMaxAppearance)
+                {
+                    _currentEditingWanderer.BodyPropertiesMaxString = actualBp;
+                    FileLogger.Log($"Updated BodyPropertiesMax for wanderer: {_currentEditingWanderer.Name}");
+                }
+                else
+                {
+                    _currentEditingWanderer.BodyPropertiesString = actualBp;
+                    // If editing min and max is empty, also set max to the same value
+                    if (string.IsNullOrEmpty(_currentEditingWanderer.BodyPropertiesMaxString))
+                    {
+                        _currentEditingWanderer.BodyPropertiesMaxString = actualBp;
+                        FileLogger.Log($"Updated BodyPropertiesMax (auto-copied from min)");
+                    }
+                    FileLogger.Log($"Updated BodyPropertiesString for wanderer: {_currentEditingWanderer.Name}");
+                }
+
+                // Get voice/persona from the BodyProperties (FaceGen voice selection) - only for min
+                if (!_isEditingMaxAppearance && GameApiWrapper.TryGetPersonaFromBodyProperties(Hero.MainHero, out string personaId))
                 {
                     _currentEditingWanderer.Voice = personaId;
                     FileLogger.Log($"Updated Voice to '{personaId}' from BodyProperties");
                 }
-                else
+                else if (!_isEditingMaxAppearance)
                 {
                     MessageBox.Show("Could not get Voice from BodyProperties. Mod is broken! Report to mod author ASAP!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
-
-                FileLogger.Log($"Updated BodyProperties for wanderer: {_currentEditingWanderer.Name}");
             }
 
             // refresh UI
@@ -303,8 +435,8 @@ namespace BannerlordExpanded.WandererCreator.Controllers
         public void RegisterFormEvents()
         {
             if (_form == null) return;
-            _form.OnEditAppearanceRequest += HandleEditAppearance;
-            _form.OnEditTemplateRequest += HandleEditTemplate; // New Event
+            _form.OnEditTemplateRequest += HandleEditTemplate;
+            _form.OnEditBodyTemplateRequest += HandleEditBodyTemplate;
             _form.OnSaveRequest += (p) => { /* Auto-save handled by form serialization */ };
             _form.OnExportRequest += HandleExportMod;
         }

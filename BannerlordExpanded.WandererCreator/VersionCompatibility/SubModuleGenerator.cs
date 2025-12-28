@@ -43,6 +43,7 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
                     version = "v" + version;
                 }
                 SetElementAttribute(moduleNode, "Version", version);
+                SetElementAttribute(moduleNode, "Url", project.Url ?? "");
 
                 // Remove SubModules node if it exists (XML-only mod)
                 var subModulesNode = moduleNode.Element("SubModules");
@@ -74,6 +75,7 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
     <Name value=""My Mod""/>
     <Id value=""MyMod""/>
     <Version value=""v1.0.0""/>
+    <Url value=""""/>
     <SingleplayerModule value=""true""/>
     <MultiplayerModule value=""false""/>
     <DependedModules>
