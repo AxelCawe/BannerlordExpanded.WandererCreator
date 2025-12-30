@@ -1477,6 +1477,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             RefreshTemplateList();
             RefreshSkillTemplateList();
             RefreshTraitTemplateList();
+            RefreshBodyTemplateList();
             RefreshProjectInfo();
             if (Project != null) { _wandererList.DataSource = Project.Wanderers; _wandererList.DisplayMember = "Name"; }
         }

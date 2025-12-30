@@ -511,6 +511,9 @@ namespace BannerlordExpanded.WandererCreator.Controllers
 
         // State to track which set we are editing (Civilian vs Battle)
         private bool _isEditingCivilianEquipment;
+        private TaleWorlds.Localization.TextObject? _originalCharacterName;
+        private TaleWorlds.Localization.TextObject? _originalHeroName;
+        private TaleWorlds.Localization.TextObject? _originalHeroFirstName;
 
         public void RegisterFormEvents()
         {
@@ -542,6 +545,25 @@ namespace BannerlordExpanded.WandererCreator.Controllers
 
                 // CRITICAL: InventoryLogic uses CharacterObject.PlayerCharacter, NOT Hero.MainHero.CharacterObject!
                 var playerCharacter = CharacterObject.PlayerCharacter;
+
+                // Temporarily rename for the inventory screen
+                _originalCharacterName = playerCharacter.Name;
+                if (GameApiWrapper.TrySetName(playerCharacter, new TaleWorlds.Localization.TextObject(template.Name)))
+                {
+                    FileLogger.Log($"Temporarily renamed player to {template.Name}");
+                }
+
+                // Also rename Hero.MainHero if it exists (Inventory UI reads from Hero)
+                if (Hero.MainHero != null)
+                {
+                    _originalHeroName = Hero.MainHero.Name;
+                    _originalHeroFirstName = Hero.MainHero.FirstName;
+                    var newName = new TaleWorlds.Localization.TextObject(template.Name);
+                    // Hero.SetName takes (fullName, firstName)
+                    Hero.MainHero.SetName(newName, newName);
+                    FileLogger.Log($"Temporarily renamed Hero.MainHero to {template.Name}");
+                }
+
                 FileLogger.Log($"Ref Check: Hero.MainHero.CharacterObject == CharacterObject.PlayerCharacter? {dummy == playerCharacter}");
                 FileLogger.Log($"Ref Check: CharacterObject.PlayerCharacter.HeroObject == Hero.MainHero? {playerCharacter.HeroObject == Hero.MainHero}");
 
@@ -660,6 +682,26 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             // CRITICAL: Read from CharacterObject.PlayerCharacter (same as what we used in OpenInventory)
             // NOT Hero.MainHero - these are DIFFERENT objects!
             var playerCharacter = CharacterObject.PlayerCharacter;
+
+            // Restore name
+            if (_originalCharacterName != null)
+            {
+                if (GameApiWrapper.TrySetName(playerCharacter, _originalCharacterName))
+                {
+                    FileLogger.Log($"Restored player name to {_originalCharacterName}");
+                }
+                _originalCharacterName = null;
+            }
+
+            // Restore Hero name
+            if (Hero.MainHero != null && _originalHeroName != null && _originalHeroFirstName != null)
+            {
+                Hero.MainHero.SetName(_originalHeroName, _originalHeroFirstName);
+                FileLogger.Log($"Restored Hero.MainHero name to {_originalHeroName}");
+                _originalHeroName = null;
+                _originalHeroFirstName = null;
+            }
+
             var equipment = _isEditingCivilianEquipment
                 ? playerCharacter.FirstCivilianEquipment
                 : playerCharacter.Equipment;
