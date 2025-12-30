@@ -303,5 +303,75 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
         }
 
         #endregion
+
+        #region Game Data Operations
+
+        /// <summary>
+        /// Gets all skill IDs from the game's object manager.
+        /// </summary>
+        public static List<string> GetSkillIds()
+        {
+            var list = new List<string>();
+            try
+            {
+                var skills = Game.Current.ObjectManager.GetObjectTypeList<SkillObject>();
+                foreach (var s in skills)
+                {
+                    if (!string.IsNullOrEmpty(s.StringId))
+                        list.Add(s.StringId);
+                }
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"[GameApiWrapper] Error getting skill IDs: {ex.Message}");
+            }
+            return list;
+        }
+
+        /// <summary>
+        /// Gets all trait IDs from the game's object manager.
+        /// </summary>
+        public static List<string> GetTraitIds()
+        {
+            var list = new List<string>();
+            try
+            {
+                var traits = Game.Current.ObjectManager.GetObjectTypeList<TraitObject>();
+                foreach (var t in traits)
+                {
+                    if (!string.IsNullOrEmpty(t.StringId))
+                        list.Add(t.StringId);
+                }
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"[GameApiWrapper] Error getting trait IDs: {ex.Message}");
+            }
+            return list;
+        }
+
+        /// <summary>
+        /// Gets culture IDs from the game. Only includes major cultures (CanHaveSettlement = true).
+        /// </summary>
+        public static List<string> GetCultureIds()
+        {
+            var list = new List<string>();
+            try
+            {
+                var cultures = Game.Current.ObjectManager.GetObjectTypeList<CultureObject>();
+                foreach (var c in cultures)
+                {
+                    if (!string.IsNullOrEmpty(c.StringId) && c.CanHaveSettlement)
+                        list.Add(c.StringId);
+                }
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"[GameApiWrapper] Error getting culture IDs: {ex.Message}");
+            }
+            return list;
+        }
+
+        #endregion
     }
 }

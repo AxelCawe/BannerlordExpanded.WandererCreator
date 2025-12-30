@@ -56,6 +56,8 @@ namespace BannerlordExpanded.WandererCreator.UI
             base.OnActivate();
             // When we return to this screen (e.g. from FaceGen), show the form again
             BannerlordExpanded.WandererCreator.Controllers.EditorController.Instance?.OnScreenActivated();
+            // Ensure cursor is visible
+            MouseManager.ShowCursor(true);
         }
 
         protected override void OnDeactivate()
@@ -79,6 +81,9 @@ namespace BannerlordExpanded.WandererCreator.UI
         protected override void OnFrameTick(float dt)
         {
             base.OnFrameTick(dt);
+
+            // Keep cursor visible (clicking background can hide it)
+            MouseManager.ShowCursor(true);
 
             // Check if external editor signaled exit
             if (BannerlordExpanded.WandererCreator.Controllers.EditorController.Instance != null &&

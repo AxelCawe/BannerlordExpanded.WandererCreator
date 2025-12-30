@@ -190,32 +190,95 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
         public static void CreateStringsXml(string baseDir, WandererProject project)
         {
             string dataDir = Path.Combine(baseDir, "ModuleData");
+            if (!Directory.Exists(dataDir)) Directory.CreateDirectory(dataDir);
+
+            // Track all localization strings for the language file
+            var localizationStrings = new List<(string id, string text)>();
+
+            // Helper: Parse {=Key}Text format and extract key and text
+            // Returns (key, text). If no key found, generates one and returns (generatedKey, originalText)
+            (string key, string text) ParseLocalizationString(string input, string autoKeyPrefix)
+            {
+                if (string.IsNullOrEmpty(input)) return (autoKeyPrefix, "...");
+
+                // Pattern: {=key}text
+                var match = System.Text.RegularExpressions.Regex.Match(input, @"^\{=([^}]+)\}(.*)$");
+                if (match.Success)
+                {
+                    return (match.Groups[1].Value, match.Groups[2].Value.Trim());
+                }
+                // No localization key - generate one automatically
+                return (autoKeyPrefix, input);
+            }
+
             using (var writer = XmlWriter.Create(Path.Combine(dataDir, "wanderer_strings.xml"), new XmlWriterSettings { Indent = true }))
             {
                 writer.WriteStartElement("strings");
                 foreach (var w in project.Wanderers)
                 {
-                    void WriteString(string id, string text)
+                    void WriteDialogString(string dialogType, string rawText)
                     {
-                        if (string.IsNullOrEmpty(text)) text = "{=!}...";
+                        string autoKey = $"str_{project.ModuleId}_{w.Id}_{dialogType}";
+                        var (key, text) = ParseLocalizationString(rawText, autoKey);
+
+                        // Add to localization list
+                        localizationStrings.Add((key, text));
+
+                        // Write to strings.xml with the full {=key}text format (as game expects)
                         writer.WriteStartElement("string");
-                        writer.WriteAttributeString("id", id + "." + w.Id);
-                        writer.WriteAttributeString("text", text);
+                        writer.WriteAttributeString("id", dialogType + "." + w.Id);
+                        writer.WriteAttributeString("text", "{=" + key + "}" + text);
                         writer.WriteEndElement();
                     }
 
-                    WriteString("prebackstory", w.Dialogs.Intro);
-                    WriteString("backstory_a", w.Dialogs.LifeStory);
-                    WriteString("backstory_b", w.Dialogs.LifeStoryB);
-                    WriteString("backstory_c", w.Dialogs.LifeStoryC);
-                    WriteString("backstory_d", w.Dialogs.Recruitment);
-                    WriteString("generic_backstory", w.Dialogs.GenericBackstory);
-
-                    // Responses
-                    WriteString("response_1", w.Dialogs.Response1);
-                    WriteString("response_2", w.Dialogs.Response2);
+                    WriteDialogString("prebackstory", w.Dialogs.Intro);
+                    WriteDialogString("backstory_a", w.Dialogs.LifeStory);
+                    WriteDialogString("backstory_b", w.Dialogs.LifeStoryB);
+                    WriteDialogString("backstory_c", w.Dialogs.LifeStoryC);
+                    WriteDialogString("backstory_d", w.Dialogs.Recruitment);
+                    WriteDialogString("generic_backstory", w.Dialogs.GenericBackstory);
+                    WriteDialogString("response_1", w.Dialogs.Response1);
+                    WriteDialogString("response_2", w.Dialogs.Response2);
                 }
                 writer.WriteEndElement();
+            }
+
+            // Generate the language localization file
+            CreateLanguageFile(dataDir, localizationStrings);
+        }
+
+        /// <summary>
+        /// Creates the standard Bannerlord language localization XML file.
+        /// </summary>
+        private static void CreateLanguageFile(string dataDir, List<(string id, string text)> strings)
+        {
+            string langDir = Path.Combine(dataDir, "Languages");
+            if (!Directory.Exists(langDir)) Directory.CreateDirectory(langDir);
+
+            using (var writer = XmlWriter.Create(Path.Combine(langDir, "std_module_strings_xml.xml"), new XmlWriterSettings { Indent = true }))
+            {
+                writer.WriteStartElement("base");
+                writer.WriteAttributeString("xmlns", "xsi", null, "http://www.w3.org/2001/XMLSchema-instance");
+                writer.WriteAttributeString("xmlns", "xsd", null, "http://www.w3.org/2001/XMLSchema");
+                writer.WriteAttributeString("type", "string");
+
+                writer.WriteStartElement("tags");
+                writer.WriteStartElement("tag");
+                writer.WriteAttributeString("language", "English");
+                writer.WriteEndElement(); // tag
+                writer.WriteEndElement(); // tags
+
+                writer.WriteStartElement("strings");
+                foreach (var (id, text) in strings)
+                {
+                    writer.WriteStartElement("string");
+                    writer.WriteAttributeString("id", id);
+                    writer.WriteAttributeString("text", text);
+                    writer.WriteEndElement();
+                }
+                writer.WriteEndElement(); // strings
+
+                writer.WriteEndElement(); // base
             }
         }
 

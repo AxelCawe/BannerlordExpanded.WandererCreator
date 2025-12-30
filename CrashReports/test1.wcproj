@@ -1,0 +1,76 @@
+{
+  "ProjectName": "MyWandererMod",
+  "ModuleId": "MyWandererMod",
+  "Version": "1.0.0",
+  "Url": "",
+  "Wanderers": [
+    {
+      "Id": "01cc90ab-e6f6-418e-8054-74114c6e393f",
+      "Name": "New Wanderer",
+      "Culture": "aserai",
+      "IsFemale": false,
+      "Voice": "curt",
+      "Age": 22,
+      "DefaultGroup": "Infantry",
+      "SkillTemplate": "skill_template_c5af1231",
+      "TraitTemplate": "trait_template_b7e37c72",
+      "BodyPropertiesString": "",
+      "BodyPropertiesMaxString": "",
+      "BodyPropertiesTemplateId": "body_template_1f9248ab",
+      "CivilianTemplateIds": [
+        "eq_civ_custom_01cc90ab-e6f6-418e-8054-74114c6e393f_fcde"
+      ],
+      "BattleTemplateIds": [
+        "eq_civ_custom_01cc90ab-e6f6-418e-8054-74114c6e393f_fcde"
+      ],
+      "Dialogs": {
+        "Intro": "{=!}Hello there. I am a wanderer.",
+        "LifeStory": "{=!}I have seen many things...",
+        "LifeStoryB": "{=!}...",
+        "LifeStoryC": "{=!}...",
+        "Recruitment": "{=!}I can join you for a price.",
+        "GenericBackstory": "{=!}A wandering warrior.",
+        "Response1": "{=!}Most interesting. Go on.",
+        "Response2": "{=!}I have heard enough.",
+        "Cost": "500"
+      }
+    }
+  ],
+  "SharedTemplates": [
+    {
+      "Id": "eq_civ_custom_01cc90ab-e6f6-418e-8054-74114c6e393f_fcde",
+      "Name": "eq_civ_custom_01cc90ab-e6f6-418e-8054-74114c6e393f_fcde (Civ)",
+      "IsCivilian": true,
+      "Items": {
+        "WeaponItemBeginSlot": "seax_blunt"
+      }
+    }
+  ],
+  "SharedSkillTemplates": [
+    {
+      "Id": "skill_template_c5af1231",
+      "Name": "skill_template_c5af1231",
+      "Skills": {
+        "Shipmaster": 300
+      }
+    }
+  ],
+  "SharedTraitTemplates": [
+    {
+      "Id": "trait_template_b7e37c72",
+      "Name": "trait_template_b7e37c72",
+      "Traits": {
+        "Mercy": 2
+      }
+    }
+  ],
+  "SharedBodyPropertiesTemplates": [
+    {
+      "Id": "body_template_1f9248ab",
+      "Name": "body_template_1f9248ab",
+      "IsFemale": true,
+      "BodyPropertiesString": "<BodyProperties version=\"4\" age=\"22.15\" weight=\"0.3335\" build=\"0.5266\"  key=\"001B700B8000300723BAE80462396842E85236245EC1C01822931042262B66A50078500307161D11000000000000000000000000000000000000000024E82084\"  />",
+      "BodyPropertiesMaxString": "<BodyProperties version=\"4\" age=\"22.15\" weight=\"0.9329\" build=\"0.5266\"  key=\"001B700B8000300723BAE80462396842E85236245EC1C01822931042262B66A50078E00307161D11000000000000000000000000000000000000000024E82084\"  />"
+    }
+  ]
+}

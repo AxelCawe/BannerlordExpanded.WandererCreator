@@ -5,6 +5,7 @@ using BannerlordExpanded.WandererCreator.VersionCompatibility;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
@@ -21,8 +22,9 @@ namespace BannerlordExpanded.WandererCreator.Controllers
     {
         private CreatorForm _form;
         private Thread _formThread;
-        private List<string> _cachedSkillIds; // Dynamic Skills
-        private List<string> _cachedTraitIds; // Dynamic Traits
+        private List<string> _cachedSkillIds = new List<string>(); // Dynamic Skills
+        private List<string> _cachedTraitIds = new List<string>(); // Dynamic Traits
+        private List<string> _cachedCultureIds = new List<string>(); // Dynamic Cultures
 
         public static EditorController Instance { get; private set; }
         public bool ShouldExit { get; private set; }
@@ -53,7 +55,7 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             // Detect exclusive fullscreen using NativeOptions
             // DisplayMode values: 0 = Fullscreen (exclusive), 1 = Windowed, 2 = Borderless
             bool isExclusive = TaleWorlds.Engine.Options.NativeOptions.GetConfig(
-                TaleWorlds.Engine.Options.NativeOptions.NativeOptionsType.DisplayMode) == 0f;
+                TaleWorlds.Engine.Options.NativeOptions.NativeOptionsType.DisplayMode) == 2f;
 
             if (isExclusive)
             {
@@ -68,14 +70,16 @@ namespace BannerlordExpanded.WandererCreator.Controllers
         {
             try
             {
-                _cachedSkillIds = GetSkillIdsFromGame();
-                _cachedTraitIds = GetTraitIdsFromGame();
+                _cachedSkillIds = GameApiWrapper.GetSkillIds();
+                _cachedTraitIds = GameApiWrapper.GetTraitIds();
+                _cachedCultureIds = GameApiWrapper.GetCultureIds();
             }
             catch (Exception ex)
             {
-                FileLogger.Log($"Error fetching skills/traits: {ex}");
+                FileLogger.Log($"Error fetching skills/traits/cultures: {ex}");
                 _cachedSkillIds = new List<string>();
                 _cachedTraitIds = new List<string>();
+                _cachedCultureIds = new List<string>();
             }
             LaunchEditorThread();
         }
@@ -102,23 +106,56 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 _form = new CreatorForm();
                 if (_cachedSkillIds != null) _form.AvailableSkills = _cachedSkillIds;
                 if (_cachedTraitIds != null) _form.AvailableTraits = _cachedTraitIds;
+                if (_cachedCultureIds != null) _form.AvailableCultures = _cachedCultureIds;
 
                 // 1. Center the form
                 _form.StartPosition = FormStartPosition.CenterScreen;
 
                 _form.OnEditTemplateRequest += HandleEditTemplate; // Fix: Subscribe to template edits
                 _form.OnEditBodyTemplateRequest += HandleEditBodyTemplate; // Body template editing
+                _form.OnCreateBodyTemplateRequest += HandleCreateBodyTemplate; // Generate body properties for new template
                 _form.OnSaveRequest += HandleSave;
                 _form.OnExportRequest += HandleExportMod;
 
                 // 2. Handle Exit (return to Main Menu)
-                _form.FormClosed += (s, e) => { ShouldExit = true; };
+                _form.FormClosed += (s, e) =>
+                {
+                    ShouldExit = true;
+                    Application.ExitThread(); // Ensure thread exits
+                };
+
+                // 3. Parent to Game Window (so it stays on top of game but not other apps)
+                try
+                {
+                    var handle = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
+                    if (handle != IntPtr.Zero)
+                    {
+                        var wrapper = new WindowWrapper(handle);
+                        _form.Show(wrapper);
+                    }
+                    else
+                    {
+                        _form.Show();
+                    }
+                }
+                catch
+                {
+                    _form.Show();
+                }
 
                 // Keep the form thread alive
-                Application.Run(_form);
+                Application.Run();
             });
             _formThread.SetApartmentState(ApartmentState.STA);
             _formThread.Start();
+        }
+
+        // Helper class to parent the form to the game window
+        private class WindowWrapper : System.Windows.Forms.IWin32Window
+        {
+            public WindowWrapper(IntPtr handle) { _hwnd = handle; }
+            public IntPtr Handle { get { return _hwnd; } }
+            private IntPtr _hwnd;
         }
 
         // Store reference to the dummy character passed to FaceGen (so we can read from it on pop)
@@ -239,6 +276,49 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 FileLogger.Log($"Error in HandleEditAppearance: {ex}");
                 InformationManager.ShowInquiry(new InquiryData("Error", "Could not open FaceGen. (Requires Campaign?)\n" + ex.Message, true, false, "Ok", "", () => OnScreenActivated(), null));
             }
+        }
+
+        private void HandleCreateBodyTemplate(BodyPropertiesTemplate template)
+        {
+            FileLogger.Log($"HandleCreateBodyTemplate called (template: {template.Name}, IsFemale: {template.IsFemale})");
+
+            // Generate random body properties on the main thread
+            SubModule.EnqueueMainThreadAction(() =>
+            {
+                try
+                {
+                    var heroCharacter = Hero.MainHero.CharacterObject;
+                    if (heroCharacter == null)
+                    {
+                        FileLogger.Log("[MainThread] ERROR: Hero.MainHero.CharacterObject is null!");
+                        return;
+                    }
+
+                    var bpMin = heroCharacter.GetBodyPropertiesMin(true);
+                    var bpMax = heroCharacter.GetBodyPropertiesMax(true);
+                    var bodyProps = TaleWorlds.Core.FaceGen.GetRandomBodyProperties(
+                        heroCharacter.Race,
+                        template.IsFemale,
+                        bpMin, bpMax,
+                        0,
+                        new Random().Next(),
+                        heroCharacter.BodyPropertyRange?.HairTags ?? "",
+                        heroCharacter.BodyPropertyRange?.BeardTags ?? "",
+                        heroCharacter.BodyPropertyRange?.TattooTags ?? "",
+                        0.1f);
+
+                    template.BodyPropertiesString = bodyProps.ToString();
+                    template.BodyPropertiesMaxString = bodyProps.ToString();
+                    FileLogger.Log($"[MainThread] Generated BodyProperties for new template: {template.Id}");
+
+                    // Refresh the UI to show the new body properties
+                    _form?.Invoke(new Action(() => _form.RefreshBodyTemplateList()));
+                }
+                catch (Exception ex)
+                {
+                    FileLogger.Log($"Error generating body properties for template: {ex}");
+                }
+            });
         }
 
         private void HandleEditBodyTemplate(BodyPropertiesTemplate template, bool isEditingMax)
@@ -818,8 +898,8 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 );
                 Directory.CreateDirectory(saveDir);
 
-                // Save as JSON
-                string fileName = SanitizeFileName(project.ProjectName) + ".json";
+                // Save as JSON (with .wcproj extension)
+                string fileName = SanitizeFileName(project.ProjectName) + ".wcproj";
                 string savePath = Path.Combine(saveDir, fileName);
 
                 string json = Newtonsoft.Json.JsonConvert.SerializeObject(project, Newtonsoft.Json.Formatting.Indented);
@@ -847,11 +927,25 @@ namespace BannerlordExpanded.WandererCreator.Controllers
         {
             _form?.Invoke(new Action(() =>
             {
+                // Validate project before export
+                var validationResult = ValidateProjectForExport(project);
+                if (!validationResult.IsValid)
+                {
+                    MessageBox.Show($"Export Failed - Missing Required Fields:\n\n{validationResult.ErrorMessage}", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // Show warnings if any
+                if (!string.IsNullOrEmpty(validationResult.WarningMessage))
+                {
+                    var result = MessageBox.Show($"Warnings:\n\n{validationResult.WarningMessage}\n\nDo you still want to continue with the export?", "Export Warnings", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                    if (result != DialogResult.Yes) return;
+                }
+
                 using (var fbd = new FolderBrowserDialog())
                 {
                     fbd.Description = "Select Export Destination (e.g. Game's Modules Folder)";
 
-                    // Attempt to default to Modules folder if running from bin/Win64_Shipping_Client
                     string potentialModules = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "../../Modules"));
                     if (Directory.Exists(potentialModules))
                         fbd.SelectedPath = potentialModules;
@@ -874,25 +968,46 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 }
             }));
         }
-        private List<string> GetSkillIdsFromGame()
+
+        private (bool IsValid, string ErrorMessage, string WarningMessage) ValidateProjectForExport(WandererProject project)
         {
-            var list = new List<string>();
-            var skills = Game.Current.ObjectManager.GetObjectTypeList<SkillObject>();
-            foreach (var s in skills)
+            var errors = new List<string>();
+            var warnings = new List<string>();
+
+            if (project.Wanderers.Count == 0)
             {
-                list.Add(s.StringId);
+                errors.Add("No wanderers defined in the project.");
             }
-            return list;
-        }
-        private List<string> GetTraitIdsFromGame()
-        {
-            var list = new List<string>();
-            var traits = Game.Current.ObjectManager.GetObjectTypeList<TraitObject>();
-            foreach (var t in traits)
+
+            foreach (var w in project.Wanderers)
             {
-                list.Add(t.StringId);
+                string wandererPrefix = $"Wanderer '{w.Name ?? "(unnamed)"}'";
+
+                if (string.IsNullOrWhiteSpace(w.Id))
+                    errors.Add($"{wandererPrefix}: Missing ID");
+
+                if (string.IsNullOrWhiteSpace(w.Name))
+                    errors.Add($"{wandererPrefix}: Missing Name");
+
+                bool hasBodyTemplate = !string.IsNullOrEmpty(w.BodyPropertiesTemplateId) &&
+                    project.SharedBodyPropertiesTemplates.Any(t => t.Id == w.BodyPropertiesTemplateId &&
+                        !string.IsNullOrEmpty(t.BodyPropertiesString));
+                bool hasDirectBody = !string.IsNullOrEmpty(w.BodyPropertiesString);
+
+                if (!hasBodyTemplate && !hasDirectBody)
+                    errors.Add($"{wandererPrefix}: Missing Body Properties (Set or Create a body template)");
+
+                if ((w.BattleTemplateIds == null || w.BattleTemplateIds.Count == 0) &&
+                    (w.CivilianTemplateIds == null || w.CivilianTemplateIds.Count == 0))
+                {
+                    warnings.Add($"{wandererPrefix}: No equipment sets assigned. Default game template will be used.");
+                }
             }
-            return list;
+
+            string errorMsg = errors.Count > 0 ? string.Join("\n", errors) : "";
+            string warnMsg = warnings.Count > 0 ? string.Join("\n", warnings) : "";
+
+            return (errors.Count == 0, errorMsg, warnMsg);
         }
     }
 }

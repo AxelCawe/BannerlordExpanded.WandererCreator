@@ -42,6 +42,7 @@ namespace BannerlordExpanded.WandererCreator.UI
         public event Action<WandererDefinition, bool>? OnEditEquipmentRequest; // Legacy
         public event Action<EquipmentTemplate>? OnEditTemplateRequest;
         public event Action<BodyPropertiesTemplate, bool>? OnEditBodyTemplateRequest; // Edit body template (bool = isEditingMax)
+        public event Action<BodyPropertiesTemplate>? OnCreateBodyTemplateRequest; // Create new body template with generated properties
         public event Action<WandererProject>? OnSaveRequest;
         public event Action<WandererProject>? OnExportRequest;
 
@@ -72,6 +73,7 @@ namespace BannerlordExpanded.WandererCreator.UI
         {
             this.Text = "Wanderer Creator (Bannerlord)";
             this.Size = new Size(1100, 800); // Increased size
+            this.TopMost = false; // Ensure it's not always on top
 
             // Menu
             _menuStrip = new MenuStrip() { Dock = DockStyle.Top };
@@ -79,6 +81,8 @@ namespace BannerlordExpanded.WandererCreator.UI
             fileMenu.DropDownItems.Add(new ToolStripMenuItem("New Project", null, (s, e) => NewProject()));
             fileMenu.DropDownItems.Add(new ToolStripMenuItem("Open Project", null, (s, e) => OpenProject()));
             fileMenu.DropDownItems.Add(new ToolStripMenuItem("Save Project", null, (s, e) => SaveProject()));
+            fileMenu.DropDownItems.Add(new ToolStripSeparator());
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("Export Mod", null, (s, e) => { if (Project != null) OnExportRequest?.Invoke(Project); }));
             _menuStrip.Items.Add(fileMenu);
             this.MainMenuStrip = _menuStrip;
             this.Controls.Add(_menuStrip);
@@ -116,18 +120,12 @@ namespace BannerlordExpanded.WandererCreator.UI
             SetupSharedBodyTemplatesTab(tabSharedBody);
             _mainTabControl.TabPages.Add(tabSharedBody);
 
-            // Panel for Main Tabs to separate from Menu and Bottom Buttons
-            // Bottom Actions (Added first so it docks to Bottom correctly)
-            var bottomPanel = new Panel() { Height = 50, Dock = DockStyle.Bottom };
-            _saveBtn = new Button() { Text = "Save Project", Left = 10, Top = 10, Width = 100 };
-            _saveBtn.Click += (s, e) => SaveProject();
+            // Note: Bottom panel with Save/Export buttons has been removed.
+            // Save and Export are now accessible via File menu.
 
-            _exportBtn = new Button() { Text = "Export Mod", Left = 120, Top = 10, Width = 100 };
-            _exportBtn.Click += (s, e) => { if (Project != null) OnExportRequest?.Invoke(Project); };
-
-            bottomPanel.Controls.Add(_saveBtn);
-            bottomPanel.Controls.Add(_exportBtn);
-            this.Controls.Add(bottomPanel);
+            // Initialize button fields to avoid null reference issues (they are still used in UpdateControlsState)
+            _saveBtn = new Button() { Visible = false };
+            _exportBtn = new Button() { Visible = false };
 
             // Main Panel (Fills remaining space)
             var mainPanel = new Panel() { Dock = DockStyle.Fill };
@@ -306,13 +304,35 @@ namespace BannerlordExpanded.WandererCreator.UI
             y += 40;
             var lblName = new Label() { Text = "Name:", Left = labelX, Top = y, AutoSize = true };
             _nameBox = new TextBox() { Left = inputX, Top = y, Width = 250 };
-            _nameBox.TextChanged += (s, e) => { if (SelectedWanderer != null) { SelectedWanderer.Name = _nameBox.Text; _wandererList.Refresh(); } };
+            _nameBox.TextChanged += (s, e) =>
+            {
+                if (SelectedWanderer != null)
+                {
+                    SelectedWanderer.Name = _nameBox.Text;
+                    // Force listbox refresh by reassigning DataSource
+                    int selectedIndex = _wandererList.SelectedIndex;
+                    _wandererList.DataSource = null;
+                    _wandererList.DataSource = Project?.Wanderers;
+                    _wandererList.DisplayMember = "Name";
+                    if (selectedIndex >= 0 && selectedIndex < _wandererList.Items.Count)
+                        _wandererList.SelectedIndex = selectedIndex;
+                }
+            };
             tab.Controls.Add(lblName); tab.Controls.Add(_nameBox);
 
             y += 40;
             var lblCulture = new Label() { Text = "Culture:", Left = labelX, Top = y, AutoSize = true };
-            _cultureBox = new ComboBox() { Left = inputX, Top = y, Width = 250 };
-            _cultureBox.Items.AddRange(new object[] { "Empire", "Sturgia", "Aserai", "Vlandia", "Battania", "Khuzait" });
+            _cultureBox = new ComboBox() { Left = inputX, Top = y, Width = 250, DropDownStyle = ComboBoxStyle.DropDownList };
+            // Dynamic cultures will be populated later via AvailableCultures
+            // Fall back to hardcoded list if dynamic is empty
+            if (AvailableCultures != null && AvailableCultures.Count > 0)
+            {
+                _cultureBox.Items.AddRange(AvailableCultures.ToArray());
+            }
+            else
+            {
+                _cultureBox.Items.AddRange(new object[] { "empire", "sturgia", "aserai", "vlandia", "battania", "khuzait" });
+            }
             _cultureBox.SelectedIndexChanged += (s, e) => { if (SelectedWanderer != null && _cultureBox.SelectedItem != null) SelectedWanderer.Culture = _cultureBox.SelectedItem.ToString(); };
             tab.Controls.Add(lblCulture); tab.Controls.Add(_cultureBox);
 
@@ -325,7 +345,8 @@ namespace BannerlordExpanded.WandererCreator.UI
 
             y += 40;
             var lblAge = new Label() { Text = "Age:", Left = labelX, Top = y, AutoSize = true };
-            _ageBox = new TextBox() { Left = inputX, Top = y, Width = 100 };
+            _ageBox = new TextBox() { Left = inputX, Top = y, Width = 100, Text = "18" };
+            _ageBox.KeyPress += (s, e) => { if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar)) e.Handled = true; };
             _ageBox.TextChanged += (s, e) => { if (SelectedWanderer != null && int.TryParse(_ageBox.Text, out int age)) SelectedWanderer.Age = age; };
             tab.Controls.Add(lblAge); tab.Controls.Add(_ageBox);
 
@@ -388,7 +409,7 @@ namespace BannerlordExpanded.WandererCreator.UI
 
             cbTemplates.Enabled = true; txtId.Enabled = false;
 
-            if (f.ShowDialog() == DialogResult.OK)
+            if (f.ShowDialog(this) == DialogResult.OK)
             {
                 if (rbShared.Checked)
                 {
@@ -441,6 +462,8 @@ namespace BannerlordExpanded.WandererCreator.UI
             var tmpl = _templateList.SelectedItem as EquipmentTemplate;
             if (tmpl != null && Project != null)
             {
+                var result = MessageBox.Show(this, $"Are you sure you want to delete the template '{tmpl.Name}'? This cannot be undone.", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (result != DialogResult.Yes) return;
                 Project.SharedTemplates.Remove(tmpl);
                 RefreshTemplateList();
             }
@@ -553,7 +576,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             // Right: Buttons (Flow or Stack)
             var rightPanel = new FlowLayoutPanel() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(0, 25, 0, 0) };
 
-            var btnAdd = new Button() { Text = "Add...", Width = 110, Height = 30, Margin = new Padding(0, 0, 0, 5) };
+            var btnAdd = new Button() { Text = "Add New Set", Width = 110, Height = 30, Margin = new Padding(0, 0, 0, 5) };
             btnAdd.Click += (s, e) => PromptAddEquipment(isCivilian);
 
             var btnRemove = new Button() { Text = "Remove", Width = 110, Height = 30, Margin = new Padding(0, 0, 0, 5) };
@@ -564,7 +587,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             {
                 var l = isCivilian ? _civSetsList : _battleSetsList;
                 if (l != null && l.SelectedItem is EquipmentTemplate t) OnEditTemplateRequest?.Invoke(t);
-                else MessageBox.Show("Select an outfit first.");
+                else MessageBox.Show(this, "Select an outfit first.");
             };
 
             rightPanel.Controls.Add(btnAdd);
@@ -604,7 +627,13 @@ namespace BannerlordExpanded.WandererCreator.UI
             var rightPanel = new FlowLayoutPanel() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(20) };
 
             var btnCreate = new Button() { Text = "Create New Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
-            btnCreate.Click += (s, e) => PromptGenericText("New Template ID", "equipment_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) => AddTemplate(id));
+            btnCreate.Click += (s, e) => PromptGenericText("New Template ID", "equipment_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) =>
+            {
+                AddTemplate(id);
+                // Open editor for the newly created template
+                var created = Project?.SharedTemplates.FirstOrDefault(t => t.Id == id);
+                if (created != null) OnEditTemplateRequest?.Invoke(created);
+            });
 
             var btnDelete = new Button() { Text = "Delete Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
             btnDelete.Click += (s, e) => RemoveTemplate();
@@ -651,7 +680,13 @@ namespace BannerlordExpanded.WandererCreator.UI
             var rightPanel = new FlowLayoutPanel() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(20) };
 
             var btnCreate = new Button() { Text = "Create New Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
-            btnCreate.Click += (s, e) => PromptGenericText("New Skill Template ID", "skill_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) => AddSkillTemplate(id));
+            btnCreate.Click += (s, e) => PromptGenericText("New Skill Template ID", "skill_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) =>
+            {
+                AddSkillTemplate(id);
+                // Open editor for the newly created skill template
+                var created = Project?.SharedSkillTemplates.FirstOrDefault(t => t.Id == id);
+                if (created != null) PromptEditSkills(created);
+            });
 
             var btnDelete = new Button() { Text = "Delete Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
             btnDelete.Click += (s, e) => RemoveSkillTemplate();
@@ -712,8 +747,39 @@ namespace BannerlordExpanded.WandererCreator.UI
             }
         }
 
-        public List<string> AvailableSkills { get; set; } = new List<string>();
-        public List<string> AvailableTraits { get; set; } = new List<string>();
+        #region Dynamic Game Data Properties
+
+        private List<string> _availableSkills = new List<string>();
+        public List<string> AvailableSkills
+        {
+            get => _availableSkills;
+            set => _availableSkills = value ?? new List<string>();
+        }
+
+        private List<string> _availableTraits = new List<string>();
+        public List<string> AvailableTraits
+        {
+            get => _availableTraits;
+            set => _availableTraits = value ?? new List<string>();
+        }
+
+        private List<string> _availableCultures = new List<string>();
+        public List<string> AvailableCultures
+        {
+            get => _availableCultures;
+            set
+            {
+                _availableCultures = value ?? new List<string>();
+                // Repopulate culture combobox when cultures are set
+                if (_cultureBox != null && _availableCultures.Count > 0)
+                {
+                    _cultureBox.Items.Clear();
+                    _cultureBox.Items.AddRange(_availableCultures.ToArray());
+                }
+            }
+        }
+
+        #endregion
 
 
         private void PromptEditSkills(SkillTemplate template)
@@ -734,7 +800,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             else
             {
                 // Fallback
-                MessageBox.Show("Warning: Could not fetch skill list from the game.\nUsing hardcoded fallback list. Please let the mod author know about this.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, "Warning: Could not fetch skill list from the game.\nUsing hardcoded fallback list. Please let the mod author know about this.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 colId.Items.AddRange(new object[] {
                     "OneHanded", "TwoHanded", "Polearm", "Bow", "Crossbow", "Throwing",
                     "Riding", "Athletics", "Smithing",
@@ -761,7 +827,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             f.Controls.Add(grid);
             f.Controls.Add(pnlBottom);
 
-            if (f.ShowDialog() == DialogResult.OK)
+            if (f.ShowDialog(this) == DialogResult.OK)
             {
                 template.Skills.Clear();
                 foreach (DataGridViewRow row in grid.Rows)
@@ -889,7 +955,7 @@ namespace BannerlordExpanded.WandererCreator.UI
                 if (_bodyTemplateList?.SelectedItem is BodyPropertiesTemplate t)
                     OnEditBodyTemplateRequest?.Invoke(t, false);
                 else
-                    MessageBox.Show("Select a template first.");
+                    MessageBox.Show(this, "Select a template first.");
             };
             rightPanel.Controls.Add(lblMin);
             rightPanel.Controls.Add(_bodyTemplateMinBox);
@@ -906,7 +972,7 @@ namespace BannerlordExpanded.WandererCreator.UI
                 if (_bodyTemplateList?.SelectedItem is BodyPropertiesTemplate t)
                     OnEditBodyTemplateRequest?.Invoke(t, true);
                 else
-                    MessageBox.Show("Select a template first.");
+                    MessageBox.Show(this, "Select a template first.");
             };
             rightPanel.Controls.Add(lblMax);
             rightPanel.Controls.Add(_bodyTemplateMaxBox);
@@ -947,6 +1013,8 @@ namespace BannerlordExpanded.WandererCreator.UI
             RefreshBodyTemplateList();
             // Select the new template
             if (_bodyTemplateList != null) _bodyTemplateList.SelectedItem = t;
+            // Request body properties generation from EditorController
+            OnCreateBodyTemplateRequest?.Invoke(t);
         }
 
         private void PromptCreateBodyTemplate()
@@ -966,7 +1034,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             f.Controls.Add(lblGender); f.Controls.Add(cbFemale);
             f.Controls.Add(btnOk); f.Controls.Add(btnCancel);
 
-            if (f.ShowDialog() == DialogResult.OK)
+            if (f.ShowDialog(this) == DialogResult.OK)
             {
                 if (!string.IsNullOrWhiteSpace(txtId.Text))
                 {
@@ -1030,7 +1098,7 @@ namespace BannerlordExpanded.WandererCreator.UI
 
             cbTemplates.Enabled = true; txtId.Enabled = false;
 
-            if (f.ShowDialog() == DialogResult.OK)
+            if (f.ShowDialog(this) == DialogResult.OK)
             {
                 if (rbShared.Checked)
                 {
@@ -1044,16 +1112,14 @@ namespace BannerlordExpanded.WandererCreator.UI
                     string rawId = txtId.Text;
                     if (!string.IsNullOrWhiteSpace(rawId))
                     {
-                        // Auto-set IsFemale to match wanderer's gender
-                        var newT = new BodyPropertiesTemplate() { Id = rawId, Name = rawId, IsFemale = SelectedWanderer.IsFemale };
-                        Project.SharedBodyPropertiesTemplates.Add(newT);
-                        SelectedWanderer.BodyPropertiesTemplateId = newT.Id;
-                        RefreshBodyTemplateList();
+                        // Use centralized function to create template (generates body properties)
+                        AddBodyTemplate(rawId, SelectedWanderer.IsFemale);
+                        SelectedWanderer.BodyPropertiesTemplateId = rawId;
 
                         // Switch to Shared Body Templates tab and select the new template
                         if (_mainTabControl != null && _bodyTemplateList != null)
                         {
-                            // Find and switch to the Shared Body Templates tab (index 5)
+                            // Find and switch to the Shared Body Templates tab
                             foreach (TabPage tab in _mainTabControl.TabPages)
                             {
                                 if (tab.Text == "Shared Body Templates")
@@ -1062,8 +1128,9 @@ namespace BannerlordExpanded.WandererCreator.UI
                                     break;
                                 }
                             }
-                            // Select the new template in the list
-                            _bodyTemplateList.SelectedItem = newT;
+                            // Select the new template in the list by ID
+                            var createdTemplate = Project.SharedBodyPropertiesTemplates.FirstOrDefault(t => t.Id == rawId);
+                            if (createdTemplate != null) _bodyTemplateList.SelectedItem = createdTemplate;
                         }
                     }
                 }
@@ -1116,7 +1183,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             f.Controls.Add(btnOk); f.Controls.Add(btnCancel);
             f.AcceptButton = btnOk; f.CancelButton = btnCancel;
 
-            if (f.ShowDialog() == DialogResult.OK)
+            if (f.ShowDialog(this) == DialogResult.OK)
             {
                 if (rbShared.Checked)
                 {
@@ -1192,7 +1259,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             f.Controls.Add(grid);
             f.Controls.Add(pnlBottom);
 
-            if (f.ShowDialog() == DialogResult.OK)
+            if (f.ShowDialog(this) == DialogResult.OK)
             {
                 template.Traits.Clear();
                 foreach (DataGridViewRow row in grid.Rows)
@@ -1237,10 +1304,11 @@ namespace BannerlordExpanded.WandererCreator.UI
             _txtResponse1 = AddField("Response 1:", "Player: 'Tell me more'", 40, (v) => SelectedWanderer.Dialogs.Response1 = v);
             _txtResponse2 = AddField("Response 2:", "Player: 'Not interested'", 40, (v) => SelectedWanderer.Dialogs.Response2 = v);
 
-            var lblCost = new Label() { Text = "Recruitment Cost:", Left = x, Top = y, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold) };
-            _costBox = new TextBox() { Left = x, Top = y + 25, Width = 150 };
+            var lblCost = new Label() { Text = "Recruitment Cost:", Left = x, Top = y, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold), Visible = false };
+            _costBox = new TextBox() { Left = x, Top = y + 25, Width = 150, Visible = false };
             _costBox.TextChanged += (s, e) => { if (SelectedWanderer != null) SelectedWanderer.Dialogs.Cost = _costBox.Text; };
-            tab.Controls.Add(lblCost); tab.Controls.Add(_costBox);
+            // Note: Cost field is hidden as per plan. UI element kept for data binding but not displayed.
+            // tab.Controls.Add(lblCost); tab.Controls.Add(_costBox);
         }
 
         // ... (Existing Methods: AddTemplate, PromptGenericText, PromptAddEquipment) ...
@@ -1264,18 +1332,18 @@ namespace BannerlordExpanded.WandererCreator.UI
             var btnCancel = new Button() { Text = "Cancel", Left = 290, Top = 70, Width = 80, DialogResult = DialogResult.Cancel };
             f.Controls.Add(lbl); f.Controls.Add(box); f.Controls.Add(btnOk); f.Controls.Add(btnCancel);
             f.AcceptButton = btnOk; f.CancelButton = btnCancel;
-            if (f.ShowDialog() == DialogResult.OK) onOk(box.Text);
+            if (f.ShowDialog(this) == DialogResult.OK) onOk(box.Text);
         }
 
         private void PromptAddEquipment(bool isCivilian)
         {
             if (Project == null || SelectedWanderer == null) return;
             var f = new Form() { Text = "Add Equipment Set", Width = 400, Height = 250, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false };
-            var rbShared = new RadioButton() { Text = "Use Shared Template", Left = 20, Top = 20, AutoSize = true, Checked = true };
+            var rbShared = new RadioButton() { Text = "Use Existing Template", Left = 20, Top = 20, AutoSize = true, Checked = true };
             var cbTemplates = new ComboBox() { Left = 40, Top = 45, Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
             cbTemplates.DataSource = Project.SharedTemplates;
             cbTemplates.DisplayMember = "Name";
-            var rbCustom = new RadioButton() { Text = "Create Custom Set", Left = 20, Top = 80, AutoSize = true };
+            var rbCustom = new RadioButton() { Text = "Create New Set", Left = 20, Top = 80, AutoSize = true };
             var lblId = new Label() { Text = "Custom ID:", Left = 40, Top = 105, AutoSize = true };
             var suffix = isCivilian ? "civ" : "battle";
             var txtId = new TextBox() { Text = $"eq_{suffix}_custom_{SelectedWanderer.Id}_{Guid.NewGuid().ToString("N").Substring(0, 4)}", Left = 110, Top = 100, Width = 230 };
@@ -1286,7 +1354,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             f.Controls.Add(btnOk); f.Controls.Add(btnCancel);
             rbShared.CheckedChanged += (s, e) => { cbTemplates.Enabled = rbShared.Checked; txtId.Enabled = !rbShared.Checked; };
             cbTemplates.Enabled = true; txtId.Enabled = false;
-            if (f.ShowDialog() == DialogResult.OK)
+            if (f.ShowDialog(this) == DialogResult.OK)
             {
                 if (rbShared.Checked)
                 {
@@ -1305,6 +1373,11 @@ namespace BannerlordExpanded.WandererCreator.UI
                         Project.SharedTemplates.Add(newT);
                         if (isCivilian) SelectedWanderer.CivilianTemplateIds.Add(newT.Id);
                         else SelectedWanderer.BattleTemplateIds.Add(newT.Id);
+
+                        // Auto-open the inventory editor for the newly created template
+                        RefreshWandererEquipmentUI();
+                        OnEditTemplateRequest?.Invoke(newT);
+                        return; // Exit early since we already refreshed
                     }
                 }
                 RefreshWandererEquipmentUI();
@@ -1312,10 +1385,68 @@ namespace BannerlordExpanded.WandererCreator.UI
         }
 
         // STANDARD METHODS
-        private void NewProject() { Project = new WandererProject(); UpdateControlsState(); RefreshList(); }
+        private void NewProject()
+        {
+            if (Project != null)
+            {
+                var result = MessageBox.Show(this, "You have a project open. Creating a new project will discard any unsaved changes. Continue?", "Confirm New Project", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (result != DialogResult.Yes) return;
+            }
+            Project = new WandererProject();
+            UpdateControlsState();
+            RefreshList();
+        }
         private string GetProjectDirectory() { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Mount and Blade II Bannerlord", "WandererCreatorProjects"); }
-        private void OpenProject() { /* ... */ using (var openFileDialog = new OpenFileDialog()) { openFileDialog.InitialDirectory = GetProjectDirectory(); openFileDialog.Filter = "Wanderer Project (*.json)|*.json"; if (openFileDialog.ShowDialog() == DialogResult.OK) { try { string json = File.ReadAllText(openFileDialog.FileName); Project = JsonConvert.DeserializeObject<WandererProject>(json); UpdateControlsState(); RefreshList(); } catch (Exception ex) { MessageBox.Show("Error " + ex.Message); } } } }
-        private void SaveProject() { /* ... */ if (Project == null) return; using (var saveFileDialog = new SaveFileDialog()) { saveFileDialog.InitialDirectory = GetProjectDirectory(); saveFileDialog.Filter = "Wanderer Project (*.json)|*.json"; if (saveFileDialog.ShowDialog() == DialogResult.OK) { try { string json = JsonConvert.SerializeObject(Project, Formatting.Indented); File.WriteAllText(saveFileDialog.FileName, json); MessageBox.Show("Project Saved."); OnSaveRequest?.Invoke(Project); } catch (Exception ex) { MessageBox.Show("Error " + ex.Message); } } } }
+        private void OpenProject()
+        {
+            if (Project != null)
+            {
+                var result = MessageBox.Show(this, "You have a project open. Opening another project will discard any unsaved changes. Continue?", "Confirm Open Project", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (result != DialogResult.Yes) return;
+            }
+            using (var openFileDialog = new OpenFileDialog())
+            {
+                openFileDialog.InitialDirectory = GetProjectDirectory();
+                openFileDialog.Filter = "Wanderer Project (*.wcproj)|*.wcproj";
+                if (openFileDialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    try
+                    {
+                        string json = File.ReadAllText(openFileDialog.FileName);
+                        Project = JsonConvert.DeserializeObject<WandererProject>(json);
+                        UpdateControlsState();
+                        RefreshList();
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(this, "Error loading project: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+        private void SaveProject()
+        {
+            if (Project == null) return;
+            using (var saveFileDialog = new SaveFileDialog())
+            {
+                saveFileDialog.InitialDirectory = GetProjectDirectory();
+                saveFileDialog.Filter = "Wanderer Project (*.wcproj)|*.wcproj";
+                if (saveFileDialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    try
+                    {
+                        string json = JsonConvert.SerializeObject(Project, Formatting.Indented);
+                        File.WriteAllText(saveFileDialog.FileName, json);
+                        MessageBox.Show(this, "Project Saved.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        OnSaveRequest?.Invoke(Project);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(this, "Error saving project: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
 
         private void UpdateControlsState()
         {
@@ -1330,7 +1461,16 @@ namespace BannerlordExpanded.WandererCreator.UI
         }
 
         private void AddWanderer() { if (Project == null) return; var w = new WandererDefinition() { Name = "New Wanderer" }; Project.Wanderers.Add(w); RefreshList(); SelectWanderer(w); }
-        private void RemoveWanderer() { if (SelectedWanderer != null && Project != null) { Project.Wanderers.Remove(SelectedWanderer); SelectedWanderer = null; RefreshList(); ResetInputs(); } }
+        private void RemoveWanderer()
+        {
+            if (SelectedWanderer == null || Project == null) return;
+            var result = MessageBox.Show(this, $"Are you sure you want to delete the wanderer '{SelectedWanderer.Name}'? This cannot be undone.", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (result != DialogResult.Yes) return;
+            Project.Wanderers.Remove(SelectedWanderer);
+            SelectedWanderer = null;
+            RefreshList();
+            ResetInputs();
+        }
         private void RefreshList()
         {
             _wandererList.DataSource = null;
@@ -1368,17 +1508,44 @@ namespace BannerlordExpanded.WandererCreator.UI
             if (_cultureBox != null) _cultureBox.SelectedIndex = -1;
             if (_isFemaleBox != null) _isFemaleBox.Checked = false;
 
-            if (_ageBox != null) _ageBox.Text = "22";
+            if (_ageBox != null) _ageBox.Text = "18";
             if (_defaultGroupBox != null) _defaultGroupBox.SelectedIndex = -1;
             if (_skillTemplateDisplay != null) _skillTemplateDisplay.Text = "";
             if (_bodyTemplateDisplay != null) _bodyTemplateDisplay.Text = "";
             if (_txtIntro != null) _txtIntro.Text = "";
+
+            SetWandererControlsEnabled(false);
+        }
+
+        private void SetWandererControlsEnabled(bool enabled)
+        {
+            if (_nameBox != null) _nameBox.Enabled = enabled;
+            if (_idBox != null) _idBox.Enabled = enabled;
+            if (_cultureBox != null) _cultureBox.Enabled = enabled;
+            if (_isFemaleBox != null) _isFemaleBox.Enabled = enabled;
+            if (_ageBox != null) _ageBox.Enabled = enabled;
+            if (_defaultGroupBox != null) _defaultGroupBox.Enabled = enabled;
+            if (_skillTemplateDisplay != null) _skillTemplateDisplay.Enabled = enabled;
+            if (_traitTemplateDisplay != null) _traitTemplateDisplay.Enabled = enabled;
+            if (_bodyTemplateDisplay != null) _bodyTemplateDisplay.Enabled = enabled;
+
+            if (_txtIntro != null) _txtIntro.Enabled = enabled;
+            if (_txtBackstoryA != null) _txtBackstoryA.Enabled = enabled;
+            if (_txtBackstoryB != null) _txtBackstoryB.Enabled = enabled;
+            if (_txtBackstoryC != null) _txtBackstoryC.Enabled = enabled;
+            if (_txtBackstoryD != null) _txtBackstoryD.Enabled = enabled;
+            if (_txtGeneric != null) _txtGeneric.Enabled = enabled;
+            if (_txtResponse1 != null) _txtResponse1.Enabled = enabled;
+            if (_txtResponse2 != null) _txtResponse2.Enabled = enabled;
         }
 
         public void SelectWanderer(WandererDefinition? w)
         {
             SelectedWanderer = w;
             if (w == null) { ResetInputs(); return; }
+
+            SetWandererControlsEnabled(true);
+
             if (_nameBox != null) _nameBox.Text = w.Name;
             if (_idBox != null) _idBox.Text = w.Id;
             if (_cultureBox != null) _cultureBox.SelectedItem = w.Culture;
@@ -1389,10 +1556,15 @@ namespace BannerlordExpanded.WandererCreator.UI
 
             if (_skillTemplateDisplay != null)
             {
-                _skillTemplateDisplay.Text = w.SkillTemplate;
+                if (string.IsNullOrEmpty(w.SkillTemplate))
+                    _skillTemplateDisplay.Text = "(None)";
+                else
+                {
+                    var t = Project?.SharedSkillTemplates.FirstOrDefault(x => x.Id == w.SkillTemplate);
+                    _skillTemplateDisplay.Text = t != null ? t.Name : w.SkillTemplate;
+                }
             }
 
-            // Update body template display (handles both template and direct values)
             UpdateBodyTemplateDisplay();
 
             if (_txtIntro != null) _txtIntro.Text = w.Dialogs.Intro;
