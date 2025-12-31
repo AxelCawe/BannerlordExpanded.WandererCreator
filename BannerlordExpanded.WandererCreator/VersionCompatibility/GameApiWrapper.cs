@@ -373,5 +373,186 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
         }
 
         #endregion
+
+        #region Module & Dependency Operations
+
+        /// <summary>
+        /// Core/official module IDs that don't need dependency declarations.
+        /// </summary>
+        public static readonly HashSet<string> CoreModuleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Native", "SandBoxCore", "Sandbox", "StoryMode",
+            "CustomBattle", "Multiplayer", "NavalDLC", "BirthAndDeath", "FastMode"
+        };
+
+        /// <summary>
+        /// Checks if a module ID is a core/official module.
+        /// </summary>
+        public static bool IsCoreModule(string moduleId)
+        {
+            if (string.IsNullOrEmpty(moduleId)) return true;
+            return CoreModuleIds.Contains(moduleId);
+        }
+
+        /// <summary>
+        /// Gets all currently loaded module IDs.
+        /// </summary>
+        public static List<string> GetLoadedModuleIds()
+        {
+            var list = new List<string>();
+            try
+            {
+                var modules = TaleWorlds.ModuleManager.ModuleHelper.GetModules();
+                foreach (var m in modules)
+                {
+                    if (!string.IsNullOrEmpty(m.Id))
+                        list.Add(m.Id);
+                }
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"[GameApiWrapper] Error getting loaded module IDs: {ex.Message}");
+            }
+            return list;
+        }
+        /// <summary>
+        /// Cache mapping item StringIds to their source module.
+        /// Built on first use from XmlInformationList.
+        /// </summary>
+        private static Dictionary<string, string> _itemToModuleCache = null;
+        private static bool _cacheBuilt = false;
+
+        /// <summary>
+        /// Tries to get the source module ID for an item by its StringId.
+        /// Uses a cached mapping from item IDs to module IDs.
+        /// </summary>
+        public static bool TryGetItemSourceModule(string itemId, out string moduleId)
+        {
+            moduleId = "";
+            if (string.IsNullOrEmpty(itemId)) return false;
+
+            try
+            {
+                // First, verify the item exists in the ObjectManager
+                var item = Game.Current?.ObjectManager?.GetObject<ItemObject>(itemId);
+                if (item == null)
+                {
+                    return false;
+                }
+
+                // Build cache if not already built
+                if (!_cacheBuilt)
+                {
+                    BuildItemModuleCache();
+                }
+
+                // Look up the item in our cache
+                if (_itemToModuleCache != null && _itemToModuleCache.TryGetValue(itemId, out string cachedModule))
+                {
+                    if (!IsCoreModule(cachedModule))
+                    {
+                        moduleId = cachedModule;
+                        return true;
+                    }
+                    // Item is from a core module, return false (no dependency needed)
+                    return false;
+                }
+
+                // Item not found in cache, assume it's from a core module
+                return false;
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"[GameApiWrapper] Error getting item source module for '{itemId}': {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Builds a cache mapping item StringIds to their source module names.
+        /// Parses the XmlInformationList and loads XML files to extract item IDs.
+        /// </summary>
+        private static void BuildItemModuleCache()
+        {
+            _itemToModuleCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            _cacheBuilt = true;
+
+            try
+            {
+                foreach (var xmlInfo in TaleWorlds.ObjectSystem.XmlResource.XmlInformationList)
+                {
+                    // Only process Items XML files
+                    if (xmlInfo.Id != "Items" && xmlInfo.Id != "SPItems")
+                        continue;
+
+                    string moduleName = xmlInfo.ModuleName;
+
+                    // Skip if we can't determine the module
+                    if (string.IsNullOrEmpty(moduleName))
+                        continue;
+
+                    try
+                    {
+                        // Try to get the XML path and parse it
+                        string xmlPath = TaleWorlds.ModuleManager.ModuleHelper.GetXmlPath(moduleName, xmlInfo.Name);
+                        if (string.IsNullOrEmpty(xmlPath) || !System.IO.File.Exists(xmlPath))
+                            continue;
+
+                        // Parse the XML to extract item IDs
+                        var doc = System.Xml.Linq.XDocument.Load(xmlPath);
+                        var items = doc.Descendants("Item");
+                        foreach (var itemElement in items)
+                        {
+                            var idAttr = itemElement.Attribute("id");
+                            if (idAttr != null && !string.IsNullOrEmpty(idAttr.Value))
+                            {
+                                // Map this item ID to its module
+                                // Later entries override earlier ones (mod overrides)
+                                _itemToModuleCache[idAttr.Value] = moduleName;
+                            }
+                        }
+
+                        // Also check for CraftedItem elements
+                        var craftedItems = doc.Descendants("CraftedItem");
+                        foreach (var craftedElement in craftedItems)
+                        {
+                            var idAttr = craftedElement.Attribute("id");
+                            if (idAttr != null && !string.IsNullOrEmpty(idAttr.Value))
+                            {
+                                _itemToModuleCache[idAttr.Value] = moduleName;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        FileLogger.Log($"[GameApiWrapper] Error parsing XML for module '{moduleName}': {ex.Message}");
+                    }
+                }
+
+                FileLogger.Log($"[GameApiWrapper] Built item-to-module cache with {_itemToModuleCache.Count} entries");
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"[GameApiWrapper] Error building item module cache: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Gets the module info for a module ID. May return null.
+        /// </summary>
+        public static TaleWorlds.ModuleManager.ModuleInfo GetModuleInfo(string moduleId)
+        {
+            try
+            {
+                return TaleWorlds.ModuleManager.ModuleHelper.GetModuleInfo(moduleId);
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"[GameApiWrapper] Error getting module info for '{moduleId}': {ex.Message}");
+                return null;
+            }
+        }
+
+        #endregion
     }
 }

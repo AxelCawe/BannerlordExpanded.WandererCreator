@@ -111,6 +111,10 @@ namespace BannerlordExpanded.WandererCreator.Models
         public bool IsFemale { get; set; } = false;
         public string BodyPropertiesString { get; set; } = "";
         public string BodyPropertiesMaxString { get; set; } = "";
+
+        // Display-only property for UI (not serialized)
+        [Newtonsoft.Json.JsonIgnore]
+        public string DisplayName => IsFemale ? $"{Name} (Female)" : $"{Name} (Male)";
     }
 
     [Serializable]
@@ -125,6 +129,11 @@ namespace BannerlordExpanded.WandererCreator.Models
         public List<SkillTemplate> SharedSkillTemplates { get; set; } = new List<SkillTemplate>();
         public List<TraitTemplate> SharedTraitTemplates { get; set; } = new List<TraitTemplate>();
         public List<BodyPropertiesTemplate> SharedBodyPropertiesTemplates { get; set; } = new List<BodyPropertiesTemplate>();
+
+        /// <summary>
+        /// Detected third-party mod dependencies based on equipment used.
+        /// </summary>
+        public List<ModDependencyInfo> DetectedDependencies { get; set; } = new List<ModDependencyInfo>();
     }
 }
 

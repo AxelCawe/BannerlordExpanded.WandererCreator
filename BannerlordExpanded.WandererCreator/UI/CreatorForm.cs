@@ -1,4 +1,5 @@
 using BannerlordExpanded.WandererCreator.Models;
+using BannerlordExpanded.WandererCreator.Services;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -35,6 +36,15 @@ namespace BannerlordExpanded.WandererCreator.UI
         private TextBox? _projectNameBox;
         private TextBox? _projectVersionBox;
         private TextBox? _projectUrlBox;
+
+        // Dependency Tracking Fields
+        private ListBox? _dependencyList;
+        private CheckBox? _autoScanDependencies;
+        private ToolTip? _dependencyToolTip;
+        private int _lastDependencyIndex = -1;
+
+        // Project File Path Tracking (for save dialog default filename)
+        private string? _currentProjectFilePath = null;
 
         public WandererProject Project { get; private set; }
         public WandererDefinition SelectedWanderer { get; private set; }
@@ -82,7 +92,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             fileMenu.DropDownItems.Add(new ToolStripMenuItem("Open Project", null, (s, e) => OpenProject()));
             fileMenu.DropDownItems.Add(new ToolStripMenuItem("Save Project", null, (s, e) => SaveProject()));
             fileMenu.DropDownItems.Add(new ToolStripSeparator());
-            fileMenu.DropDownItems.Add(new ToolStripMenuItem("Export Mod", null, (s, e) => { if (Project != null) OnExportRequest?.Invoke(Project); }));
+            fileMenu.DropDownItems.Add(new ToolStripMenuItem("Export Mod", null, (s, e) => ExportMod()));
             _menuStrip.Items.Add(fileMenu);
             this.MainMenuStrip = _menuStrip;
             this.Controls.Add(_menuStrip);
@@ -172,7 +182,36 @@ namespace BannerlordExpanded.WandererCreator.UI
             var lblUrlHint = new Label() { Text = "(Optional, e.g., Nexus Mods page)", Left = inputX + inputWidth + 10, Top = y, AutoSize = true, ForeColor = Color.Gray };
             tab.Controls.Add(lblUrl); tab.Controls.Add(_projectUrlBox); tab.Controls.Add(lblUrlHint);
 
-            y += 80;
+            y += 60;
+            // Dependencies Section
+            var lblDependencies = new Label() { Text = "Detected Mod Dependencies:", Left = labelX, Top = y, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold) };
+            tab.Controls.Add(lblDependencies);
+
+            y += 25;
+            _dependencyList = new ListBox() { Left = labelX, Top = y, Width = 400, Height = 120 };
+            _dependencyToolTip = new ToolTip() { AutoPopDelay = 10000, InitialDelay = 300 };
+            _dependencyList.MouseMove += DependencyList_MouseMove;
+            tab.Controls.Add(_dependencyList);
+
+            var btnScanDependencies = new Button() { Text = "Scan Now", Left = labelX + 410, Top = y, Width = 100, Height = 30 };
+            btnScanDependencies.Click += (s, e) => ScanDependencies();
+            tab.Controls.Add(btnScanDependencies);
+
+            _autoScanDependencies = new CheckBox() { Text = "Auto-scan on Load/Save/Export", Left = labelX + 410, Top = y + 38, AutoSize = true, Checked = true };
+            tab.Controls.Add(_autoScanDependencies);
+
+            var lblDepHint = new Label()
+            {
+                Text = "Dependencies are added to SubModule.xml when exporting.\n\nUse 'Scan Now' to manually detect mods or enable auto-scan.",
+                Left = labelX + 410,
+                Top = y + 65,
+                Width = 200,
+                Height = 70,
+                ForeColor = Color.Gray
+            };
+            tab.Controls.Add(lblDepHint);
+
+            y += 140;
             // Info Panel
             var infoLabel = new Label()
             {
@@ -441,7 +480,9 @@ namespace BannerlordExpanded.WandererCreator.UI
             }
         }
 
-        private ListBox? _templateList;
+
+        private ListBox? _battleTemplateList;
+        private ListBox? _civilianTemplateList;
         private ListBox? _skillTemplateList;
         private ListBox? _traitTemplateList;
         private ListBox? _bodyTemplateList;
@@ -458,12 +499,19 @@ namespace BannerlordExpanded.WandererCreator.UI
 
         private void RemoveTemplate()
         {
-            if (_templateList == null) return;
-            var tmpl = _templateList.SelectedItem as EquipmentTemplate;
+            var tmpl = GetSelectedEquipmentTemplate();
             if (tmpl != null && Project != null)
             {
                 var result = MessageBox.Show(this, $"Are you sure you want to delete the template '{tmpl.Name}'? This cannot be undone.", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 if (result != DialogResult.Yes) return;
+
+                // Remove all wanderer references to this template
+                foreach (var w in Project.Wanderers)
+                {
+                    w.CivilianTemplateIds.Remove(tmpl.Id);
+                    w.BattleTemplateIds.Remove(tmpl.Id);
+                }
+
                 Project.SharedTemplates.Remove(tmpl);
                 RefreshTemplateList();
             }
@@ -471,13 +519,24 @@ namespace BannerlordExpanded.WandererCreator.UI
 
         public void RefreshTemplateList()
         {
-            if (_templateList == null) return;
-            _templateList.DataSource = null;
-            if (Project != null)
+            if (Project == null) return;
+
+            // Update Battle templates list
+            if (_battleTemplateList != null)
             {
-                _templateList.DataSource = Project.SharedTemplates;
-                _templateList.DisplayMember = "Name";
+                _battleTemplateList.DataSource = null;
+                _battleTemplateList.DataSource = Project.SharedTemplates.Where(t => !t.IsCivilian).ToList();
+                _battleTemplateList.DisplayMember = "Name";
             }
+
+            // Update Civilian templates list
+            if (_civilianTemplateList != null)
+            {
+                _civilianTemplateList.DataSource = null;
+                _civilianTemplateList.DataSource = Project.SharedTemplates.Where(t => t.IsCivilian).ToList();
+                _civilianTemplateList.DisplayMember = "Name";
+            }
+
             RefreshWandererEquipmentUI();
         }
 
@@ -602,58 +661,114 @@ namespace BannerlordExpanded.WandererCreator.UI
 
         private void SetupSharedTemplatesTab(TabPage tab)
         {
-            // Layout: List on Left (Fixed Width), Actions on Right
-            var split = new SplitContainer() { Dock = DockStyle.Fill, Orientation = Orientation.Vertical, FixedPanel = FixedPanel.Panel1 };
-            split.Width = 1000;
-            split.SplitterDistance = 400;
+            // Layout: Two horizontal sections (Battle | Civilian), with buttons in the middle
+            var mainLayout = new TableLayoutPanel() { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f)); // Battle list
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200f)); // Buttons
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f)); // Civilian list
 
-            // Left: List
-            var leftPanel = new Panel() { Dock = DockStyle.Fill, Padding = new Padding(10) };
+            // Battle Templates Section (Left)
+            var battlePanel = new Panel() { Dock = DockStyle.Fill, Padding = new Padding(10) };
+            var battleLayout = new TableLayoutPanel() { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+            battleLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            battleLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            // Use Table to prevent overlap
-            var tlpLeft = new TableLayoutPanel() { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
-            tlpLeft.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            tlpLeft.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            var lblBattle = new Label() { Text = "Battle Equipment:", Dock = DockStyle.Fill, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold), TextAlign = ContentAlignment.BottomLeft };
+            _battleTemplateList = new ListBox() { Dock = DockStyle.Fill };
+            _battleTemplateList.DisplayMember = "Name";
+            _battleTemplateList.SelectedIndexChanged += (s, e) => { if (_battleTemplateList.SelectedItem != null && _civilianTemplateList != null) _civilianTemplateList.ClearSelected(); };
 
-            var lblTitle = new Label() { Text = "Project Library:", Dock = DockStyle.Fill, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold), TextAlign = ContentAlignment.BottomLeft };
-            _templateList = new ListBox() { Dock = DockStyle.Fill };
+            battleLayout.Controls.Add(lblBattle, 0, 0);
+            battleLayout.Controls.Add(_battleTemplateList, 0, 1);
+            battlePanel.Controls.Add(battleLayout);
 
-            tlpLeft.Controls.Add(lblTitle, 0, 0);
-            tlpLeft.Controls.Add(_templateList, 0, 1);
+            // Civilian Templates Section (Right)
+            var civilianPanel = new Panel() { Dock = DockStyle.Fill, Padding = new Padding(10) };
+            var civilianLayout = new TableLayoutPanel() { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
+            civilianLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            civilianLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            leftPanel.Controls.Add(tlpLeft);
+            var lblCivilian = new Label() { Text = "Civilian Equipment:", Dock = DockStyle.Fill, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold), TextAlign = ContentAlignment.BottomLeft };
+            _civilianTemplateList = new ListBox() { Dock = DockStyle.Fill };
+            _civilianTemplateList.DisplayMember = "Name";
+            _civilianTemplateList.SelectedIndexChanged += (s, e) => { if (_civilianTemplateList.SelectedItem != null && _battleTemplateList != null) _battleTemplateList.ClearSelected(); };
 
-            // Right: Buttons
-            var rightPanel = new FlowLayoutPanel() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(20) };
+            civilianLayout.Controls.Add(lblCivilian, 0, 0);
+            civilianLayout.Controls.Add(_civilianTemplateList, 0, 1);
+            civilianPanel.Controls.Add(civilianLayout);
 
-            var btnCreate = new Button() { Text = "Create New Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
-            btnCreate.Click += (s, e) => PromptGenericText("New Template ID", "equipment_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) =>
+            // Center: Buttons
+            var buttonPanel = new FlowLayoutPanel() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(10, 40, 10, 10) };
+
+            var btnCreateBattle = new Button() { Text = "New Battle Template", Width = 170, Height = 35, Margin = new Padding(0, 0, 0, 5) };
+            btnCreateBattle.Click += (s, e) => PromptGenericText("New Battle Template ID", "battle_eq_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) =>
             {
-                AddTemplate(id);
-                // Open editor for the newly created template
+                AddTemplate(id, isCivilian: false);
                 var created = Project?.SharedTemplates.FirstOrDefault(t => t.Id == id);
                 if (created != null) OnEditTemplateRequest?.Invoke(created);
             });
 
-            var btnDelete = new Button() { Text = "Delete Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
+            var btnCreateCivilian = new Button() { Text = "New Civilian Template", Width = 170, Height = 35, Margin = new Padding(0, 0, 0, 15) };
+            btnCreateCivilian.Click += (s, e) => PromptGenericText("New Civilian Template ID", "civilian_eq_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) =>
+            {
+                AddTemplate(id, isCivilian: true);
+                var created = Project?.SharedTemplates.FirstOrDefault(t => t.Id == id);
+                if (created != null) OnEditTemplateRequest?.Invoke(created);
+            });
+
+            var btnDelete = new Button() { Text = "Delete Selected", Width = 170, Height = 35, Margin = new Padding(0, 0, 0, 5) };
             btnDelete.Click += (s, e) => RemoveTemplate();
 
-            var btnEdit = new Button() { Text = "Edit Selected (In-Game)", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
-            btnEdit.Click += (s, e) =>
+            var btnRename = new Button() { Text = "Rename Selected", Width = 170, Height = 35, Margin = new Padding(0, 0, 0, 5) };
+            btnRename.Click += (s, e) =>
             {
-                if (_templateList == null) return;
-                var tmpl = _templateList.SelectedItem as EquipmentTemplate;
-                if (tmpl != null) OnEditTemplateRequest?.Invoke(tmpl);
+                var selected = GetSelectedEquipmentTemplate();
+                if (selected != null)
+                {
+                    PromptGenericText("Rename Template", selected.Name, (newName) =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(newName))
+                        {
+                            selected.Name = newName;
+                            RefreshTemplateList();
+                        }
+                    });
+                }
+                else
+                {
+                    MessageBox.Show(this, "Select a template first.");
+                }
             };
 
-            rightPanel.Controls.Add(btnCreate);
-            rightPanel.Controls.Add(btnDelete);
-            rightPanel.Controls.Add(btnEdit);
+            var btnEdit = new Button() { Text = "Edit Selected (In-Game)", Width = 170, Height = 35, Margin = new Padding(0, 0, 0, 5) };
+            btnEdit.Click += (s, e) =>
+            {
+                var selected = GetSelectedEquipmentTemplate();
+                if (selected != null) OnEditTemplateRequest?.Invoke(selected);
+                else MessageBox.Show(this, "Select a template first.");
+            };
 
-            split.Panel1.Controls.Add(leftPanel);
-            split.Panel2.Controls.Add(rightPanel);
+            buttonPanel.Controls.Add(btnCreateBattle);
+            buttonPanel.Controls.Add(btnCreateCivilian);
+            buttonPanel.Controls.Add(btnDelete);
+            buttonPanel.Controls.Add(btnRename);
+            buttonPanel.Controls.Add(btnEdit);
 
-            tab.Controls.Add(split);
+            mainLayout.Controls.Add(battlePanel, 0, 0);
+            mainLayout.Controls.Add(buttonPanel, 1, 0);
+            mainLayout.Controls.Add(civilianPanel, 2, 0);
+
+            tab.Controls.Add(mainLayout);
+        }
+
+        /// <summary>
+        /// Gets the currently selected equipment template from either Battle or Civilian list.
+        /// </summary>
+        private EquipmentTemplate? GetSelectedEquipmentTemplate()
+        {
+            if (_battleTemplateList?.SelectedItem is EquipmentTemplate bt) return bt;
+            if (_civilianTemplateList?.SelectedItem is EquipmentTemplate ct) return ct;
+            return null;
         }
 
         private void SetupSharedSkillTemplatesTab(TabPage tab)
@@ -697,8 +812,29 @@ namespace BannerlordExpanded.WandererCreator.UI
                 if (_skillTemplateList != null && _skillTemplateList.SelectedItem is SkillTemplate t) PromptEditSkills(t);
             };
 
+            var btnRename = new Button() { Text = "Rename Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
+            btnRename.Click += (s, e) =>
+            {
+                if (_skillTemplateList?.SelectedItem is SkillTemplate tmpl)
+                {
+                    PromptGenericText("Rename Template", tmpl.Name, (newName) =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(newName))
+                        {
+                            tmpl.Name = newName;
+                            RefreshSkillTemplateList();
+                        }
+                    });
+                }
+                else
+                {
+                    MessageBox.Show(this, "Select a template first.");
+                }
+            };
+
             rightPanel.Controls.Add(btnCreate);
             rightPanel.Controls.Add(btnDelete);
+            rightPanel.Controls.Add(btnRename);
             rightPanel.Controls.Add(btnEdit);
 
             split.Panel1.Controls.Add(leftPanel);
@@ -712,6 +848,8 @@ namespace BannerlordExpanded.WandererCreator.UI
             var t = new SkillTemplate() { Id = id, Name = id };
             Project.SharedSkillTemplates.Add(t);
             RefreshSkillTemplateList();
+            // Select the new template
+            if (_skillTemplateList != null) _skillTemplateList.SelectedItem = t;
         }
 
         private void AddTraitTemplate(string id)
@@ -729,9 +867,15 @@ namespace BannerlordExpanded.WandererCreator.UI
 
         private void RemoveSkillTemplate()
         {
-            if (_skillTemplateList != null && _skillTemplateList.SelectedItem is SkillTemplate t)
+            if (_skillTemplateList != null && _skillTemplateList.SelectedItem is SkillTemplate t && Project != null)
             {
-                Project?.SharedSkillTemplates.Remove(t);
+                // Remove all wanderer references to this template
+                foreach (var w in Project.Wanderers)
+                {
+                    if (w.SkillTemplate == t.Id) w.SkillTemplate = "";
+                }
+
+                Project.SharedSkillTemplates.Remove(t);
                 RefreshSkillTemplateList();
             }
         }
@@ -873,6 +1017,12 @@ namespace BannerlordExpanded.WandererCreator.UI
             {
                 if (_traitTemplateList != null && _traitTemplateList.SelectedItem is TraitTemplate t && Project != null)
                 {
+                    // Remove all wanderer references to this template
+                    foreach (var w in Project.Wanderers)
+                    {
+                        if (w.TraitTemplate == t.Id) w.TraitTemplate = "";
+                    }
+
                     Project.SharedTraitTemplates.Remove(t);
                     ((CurrencyManager)BindingContext[Project.SharedTraitTemplates]).Refresh();
                     RefreshTraitTemplateList();
@@ -885,8 +1035,29 @@ namespace BannerlordExpanded.WandererCreator.UI
                 if (_traitTemplateList != null && _traitTemplateList.SelectedItem is TraitTemplate t) PromptEditTraitTemplate(t);
             };
 
+            var btnRename = new Button() { Text = "Rename Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
+            btnRename.Click += (s, e) =>
+            {
+                if (_traitTemplateList?.SelectedItem is TraitTemplate tmpl)
+                {
+                    PromptGenericText("Rename Template", tmpl.Name, (newName) =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(newName))
+                        {
+                            tmpl.Name = newName;
+                            RefreshTraitTemplateList();
+                        }
+                    });
+                }
+                else
+                {
+                    MessageBox.Show(this, "Select a template first.");
+                }
+            };
+
             rightPanel.Controls.Add(btnCreate);
             rightPanel.Controls.Add(btnDelete);
+            rightPanel.Controls.Add(btnRename);
             rightPanel.Controls.Add(btnEdit);
 
             split.Panel1.Controls.Add(leftPanel);
@@ -907,7 +1078,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             tlpLeft.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
             var lblTitle = new Label() { Text = "Body Templates:", Dock = DockStyle.Fill, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold), TextAlign = ContentAlignment.BottomLeft };
-            _bodyTemplateList = new ListBox() { Dock = DockStyle.Fill, DisplayMember = "Name" };
+            _bodyTemplateList = new ListBox() { Dock = DockStyle.Fill, DisplayMember = "DisplayName" };
             _bodyTemplateList.SelectedIndexChanged += (s, e) => UpdateBodyTemplateDetails();
 
             tlpLeft.Controls.Add(lblTitle, 0, 0);
@@ -928,6 +1099,27 @@ namespace BannerlordExpanded.WandererCreator.UI
             var btnDelete = new Button() { Text = "Delete", Left = labelX + 110, Top = y, Width = 80, Height = 30 };
             btnDelete.Click += (s, e) => RemoveBodyTemplate();
             rightPanel.Controls.Add(btnDelete);
+
+            var btnRename = new Button() { Text = "Rename", Left = labelX + 200, Top = y, Width = 80, Height = 30 };
+            btnRename.Click += (s, e) =>
+            {
+                if (_bodyTemplateList?.SelectedItem is BodyPropertiesTemplate tmpl)
+                {
+                    PromptGenericText("Rename Template", tmpl.Name, (newName) =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(newName))
+                        {
+                            tmpl.Name = newName;
+                            RefreshBodyTemplateList();
+                        }
+                    });
+                }
+                else
+                {
+                    MessageBox.Show(this, "Select a template first.");
+                }
+            };
+            rightPanel.Controls.Add(btnRename);
 
             y += 45;
 
@@ -1045,9 +1237,15 @@ namespace BannerlordExpanded.WandererCreator.UI
 
         private void RemoveBodyTemplate()
         {
-            if (_bodyTemplateList != null && _bodyTemplateList.SelectedItem is BodyPropertiesTemplate t)
+            if (_bodyTemplateList != null && _bodyTemplateList.SelectedItem is BodyPropertiesTemplate t && Project != null)
             {
-                Project?.SharedBodyPropertiesTemplates.Remove(t);
+                // Remove all wanderer references to this template
+                foreach (var w in Project.Wanderers)
+                {
+                    if (w.BodyPropertiesTemplateId == t.Id) w.BodyPropertiesTemplateId = "";
+                }
+
+                Project.SharedBodyPropertiesTemplates.Remove(t);
                 RefreshBodyTemplateList();
             }
         }
@@ -1315,10 +1513,10 @@ namespace BannerlordExpanded.WandererCreator.UI
         // Need to ensure I include them in this Full Write
 
         // Overloaded AddTemplate to accept ID
-        private void AddTemplate(string id)
+        private void AddTemplate(string id, bool isCivilian = false)
         {
             if (Project == null || string.IsNullOrWhiteSpace(id)) return;
-            var t = new EquipmentTemplate() { Id = id, Name = id, IsCivilian = false };
+            var t = new EquipmentTemplate() { Id = id, Name = id, IsCivilian = isCivilian };
             Project.SharedTemplates.Add(t);
             RefreshTemplateList();
         }
@@ -1341,7 +1539,15 @@ namespace BannerlordExpanded.WandererCreator.UI
             var f = new Form() { Text = "Add Equipment Set", Width = 400, Height = 250, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false };
             var rbShared = new RadioButton() { Text = "Use Existing Template", Left = 20, Top = 20, AutoSize = true, Checked = true };
             var cbTemplates = new ComboBox() { Left = 40, Top = 45, Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
-            cbTemplates.DataSource = Project.SharedTemplates;
+
+            // Filter templates: must match isCivilian flag AND must not already be added to this wanderer
+            var alreadyAddedIds = isCivilian
+                ? SelectedWanderer.CivilianTemplateIds
+                : SelectedWanderer.BattleTemplateIds;
+            var availableTemplates = Project.SharedTemplates
+                .Where(t => t.IsCivilian == isCivilian && !alreadyAddedIds.Contains(t.Id))
+                .ToList();
+            cbTemplates.DataSource = availableTemplates;
             cbTemplates.DisplayMember = "Name";
             var rbCustom = new RadioButton() { Text = "Create New Set", Left = 20, Top = 80, AutoSize = true };
             var lblId = new Label() { Text = "Custom ID:", Left = 40, Top = 105, AutoSize = true };
@@ -1393,6 +1599,7 @@ namespace BannerlordExpanded.WandererCreator.UI
                 if (result != DialogResult.Yes) return;
             }
             Project = new WandererProject();
+            _currentProjectFilePath = null; // New project has no file path
             UpdateControlsState();
             RefreshList();
         }
@@ -1414,8 +1621,34 @@ namespace BannerlordExpanded.WandererCreator.UI
                     {
                         string json = File.ReadAllText(openFileDialog.FileName);
                         Project = JsonConvert.DeserializeObject<WandererProject>(json);
+
+                        // Validate and cleanup invalid data
+                        var cleanupMessages = ValidateAndCleanupProject();
+                        if (cleanupMessages.Count > 0)
+                        {
+                            string message = "The following data was cleaned up because it no longer exists in the game:\n\n" +
+                                string.Join("\n", cleanupMessages.Take(10));
+                            if (cleanupMessages.Count > 10)
+                                message += $"\n\n... and {cleanupMessages.Count - 10} more items.";
+                            MessageBox.Show(this, message, "Project Cleanup", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+
                         UpdateControlsState();
                         RefreshList();
+
+                        // Store the file path for use in SaveProject
+                        _currentProjectFilePath = openFileDialog.FileName;
+
+                        // Auto-scan dependencies on load if toggle is checked
+                        if (_autoScanDependencies?.Checked == true && Project != null)
+                        {
+                            try
+                            {
+                                DependencyTracker.UpdateProjectDependencies(Project);
+                                RefreshDependencyList();
+                            }
+                            catch { /* Silently continue if scan fails */ }
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -1424,19 +1657,129 @@ namespace BannerlordExpanded.WandererCreator.UI
                 }
             }
         }
+
+        /// <summary>
+        /// Validates project data against current game state and removes invalid references.
+        /// Returns a list of cleanup messages for user notification.
+        /// </summary>
+        private List<string> ValidateAndCleanupProject()
+        {
+            var messages = new List<string>();
+            if (Project == null) return messages;
+
+            // Validate wanderer cultures
+            if (AvailableCultures != null && AvailableCultures.Count > 0)
+            {
+                foreach (var wanderer in Project.Wanderers)
+                {
+                    if (!string.IsNullOrEmpty(wanderer.Culture) &&
+                        !AvailableCultures.Contains(wanderer.Culture, StringComparer.OrdinalIgnoreCase))
+                    {
+                        string defaultCulture = AvailableCultures.FirstOrDefault() ?? "empire";
+                        messages.Add($"Wanderer '{wanderer.Name}': Culture '{wanderer.Culture}' → '{defaultCulture}'");
+                        wanderer.Culture = defaultCulture;
+                    }
+                }
+            }
+
+            // Validate equipment template items
+            foreach (var template in Project.SharedTemplates)
+            {
+                var invalidItems = new List<string>();
+                foreach (var kvp in template.Items.ToList())
+                {
+                    if (!IsValidItemId(kvp.Value))
+                    {
+                        invalidItems.Add(kvp.Key);
+                        messages.Add($"Template '{template.Name}': Removed invalid item '{kvp.Value}' from slot {kvp.Key}");
+                    }
+                }
+                foreach (var slot in invalidItems)
+                {
+                    template.Items.Remove(slot);
+                }
+            }
+
+            // Validate wanderer equipment template references
+            foreach (var wanderer in Project.Wanderers)
+            {
+                // Check civilian template IDs
+                var invalidCivIds = wanderer.CivilianTemplateIds
+                    .Where(id => !Project.SharedTemplates.Any(t => t.Id == id))
+                    .ToList();
+                foreach (var id in invalidCivIds)
+                {
+                    wanderer.CivilianTemplateIds.Remove(id);
+                    messages.Add($"Wanderer '{wanderer.Name}': Removed missing civilian template '{id}'");
+                }
+
+                // Check battle template IDs
+                var invalidBattleIds = wanderer.BattleTemplateIds
+                    .Where(id => !Project.SharedTemplates.Any(t => t.Id == id))
+                    .ToList();
+                foreach (var id in invalidBattleIds)
+                {
+                    wanderer.BattleTemplateIds.Remove(id);
+                    messages.Add($"Wanderer '{wanderer.Name}': Removed missing battle template '{id}'");
+                }
+            }
+
+            return messages;
+        }
+
+        /// <summary>
+        /// Checks if an item ID exists in the game.
+        /// </summary>
+        private bool IsValidItemId(string itemId)
+        {
+            if (string.IsNullOrEmpty(itemId)) return false;
+            try
+            {
+                var item = TaleWorlds.Core.Game.Current?.ObjectManager?.GetObject<TaleWorlds.Core.ItemObject>(itemId);
+                return item != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
         private void SaveProject()
         {
             if (Project == null) return;
+
+            // Auto-scan dependencies if toggle is checked
+            if (_autoScanDependencies?.Checked == true)
+            {
+                try
+                {
+                    DependencyTracker.UpdateProjectDependencies(Project);
+                    RefreshDependencyList();
+                }
+                catch { /* Silently continue if scan fails */ }
+            }
+
             using (var saveFileDialog = new SaveFileDialog())
             {
                 saveFileDialog.InitialDirectory = GetProjectDirectory();
                 saveFileDialog.Filter = "Wanderer Project (*.wcproj)|*.wcproj";
+
+                // Pre-populate with the current file path if available (file was previously opened/saved)
+                if (!string.IsNullOrEmpty(_currentProjectFilePath))
+                {
+                    saveFileDialog.FileName = Path.GetFileName(_currentProjectFilePath);
+                    saveFileDialog.InitialDirectory = Path.GetDirectoryName(_currentProjectFilePath) ?? GetProjectDirectory();
+                }
+
                 if (saveFileDialog.ShowDialog(this) == DialogResult.OK)
                 {
                     try
                     {
                         string json = JsonConvert.SerializeObject(Project, Formatting.Indented);
                         File.WriteAllText(saveFileDialog.FileName, json);
+
+                        // Update the current file path to the saved location
+                        _currentProjectFilePath = saveFileDialog.FileName;
+
                         MessageBox.Show(this, "Project Saved.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         OnSaveRequest?.Invoke(Project);
                     }
@@ -1446,6 +1789,24 @@ namespace BannerlordExpanded.WandererCreator.UI
                     }
                 }
             }
+        }
+
+        private void ExportMod()
+        {
+            if (Project == null) return;
+
+            // Auto-scan dependencies if toggle is checked
+            if (_autoScanDependencies?.Checked == true)
+            {
+                try
+                {
+                    DependencyTracker.UpdateProjectDependencies(Project);
+                    RefreshDependencyList();
+                }
+                catch { /* Silently continue if scan fails */ }
+            }
+
+            OnExportRequest?.Invoke(Project);
         }
 
         private void UpdateControlsState()
@@ -1495,12 +1856,78 @@ namespace BannerlordExpanded.WandererCreator.UI
                 if (_projectNameBox != null) _projectNameBox.Text = "";
                 if (_projectVersionBox != null) _projectVersionBox.Text = "";
                 if (_projectUrlBox != null) _projectUrlBox.Text = "";
+                RefreshDependencyList();
                 return;
             }
             if (_projectIdBox != null) _projectIdBox.Text = Project.ModuleId;
             if (_projectNameBox != null) _projectNameBox.Text = Project.ProjectName;
             if (_projectVersionBox != null) _projectVersionBox.Text = Project.Version;
             if (_projectUrlBox != null) _projectUrlBox.Text = Project.Url;
+            RefreshDependencyList();
+        }
+
+        private void ScanDependencies()
+        {
+            if (Project == null)
+            {
+                MessageBox.Show(this, "No project loaded.", "Scan Dependencies", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                DependencyTracker.UpdateProjectDependencies(Project);
+                RefreshDependencyList();
+
+                if (Project.DetectedDependencies.Count == 0)
+                {
+                    MessageBox.Show(this, "No third-party mod dependencies detected.\n\nAll equipment items appear to be from core game modules.", "Scan Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    MessageBox.Show(this, $"Found {Project.DetectedDependencies.Count} mod dependencies.\n\nThese will be added to SubModule.xml when exporting.", "Scan Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Error scanning dependencies:\n{ex.Message}", "Scan Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void RefreshDependencyList()
+        {
+            if (_dependencyList == null) return;
+            _dependencyList.Items.Clear();
+
+            if (Project?.DetectedDependencies != null)
+            {
+                foreach (var dep in Project.DetectedDependencies)
+                {
+                    _dependencyList.Items.Add($"{dep.ModuleName} ({dep.ModuleId}) - {dep.UsedItems.Count} items");
+                }
+            }
+        }
+
+        private void DependencyList_MouseMove(object? sender, MouseEventArgs e)
+        {
+            if (_dependencyList == null || _dependencyToolTip == null || Project?.DetectedDependencies == null) return;
+
+            int index = _dependencyList.IndexFromPoint(e.Location);
+            if (index != _lastDependencyIndex)
+            {
+                _lastDependencyIndex = index;
+                if (index >= 0 && index < Project.DetectedDependencies.Count)
+                {
+                    var dep = Project.DetectedDependencies[index];
+                    string tooltipText = $"Module: {dep.ModuleName}\nID: {dep.ModuleId}\n\nUsed Items:\n" +
+                        string.Join("\n", dep.UsedItems.Select(item => $"  • {item}"));
+                    _dependencyToolTip.SetToolTip(_dependencyList, tooltipText);
+                }
+                else
+                {
+                    _dependencyToolTip.SetToolTip(_dependencyList, "");
+                }
+            }
         }
         private void ResetInputs()
         {

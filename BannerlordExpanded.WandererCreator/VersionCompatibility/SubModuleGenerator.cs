@@ -63,6 +63,37 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
                 EnsureXmlNode(xmlsNode, "NPCCharacters", "wanderers");
                 EnsureXmlNode(xmlsNode, "EquipmentRosters", "wanderer_equipment");
                 EnsureXmlNode(xmlsNode, "GameText", "wanderer_strings");
+
+                // 4. Add detected mod dependencies
+                var dependedModulesNode = moduleNode.Element("DependedModules");
+                if (dependedModulesNode != null && project.DetectedDependencies != null)
+                {
+                    foreach (var dep in project.DetectedDependencies)
+                    {
+                        // Check if this dependency already exists
+                        bool exists = dependedModulesNode.Elements("DependedModule")
+                            .Any(x => x.Attribute("Id")?.Value == dep.ModuleId);
+
+                        if (!exists)
+                        {
+                            var depElement = new XElement("DependedModule",
+                                new XAttribute("Id", dep.ModuleId));
+
+                            // Add version if available
+                            if (!string.IsNullOrEmpty(dep.Version))
+                            {
+                                depElement.Add(new XAttribute("DependedModuleVersion", dep.Version));
+                            }
+
+                            if (dep.IsOptional)
+                            {
+                                depElement.Add(new XAttribute("Optional", "true"));
+                            }
+
+                            dependedModulesNode.Add(depElement);
+                        }
+                    }
+                }
             }
 
             doc.Save(path);

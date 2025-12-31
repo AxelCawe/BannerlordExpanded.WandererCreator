@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
@@ -114,7 +115,7 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 _form.OnEditTemplateRequest += HandleEditTemplate; // Fix: Subscribe to template edits
                 _form.OnEditBodyTemplateRequest += HandleEditBodyTemplate; // Body template editing
                 _form.OnCreateBodyTemplateRequest += HandleCreateBodyTemplate; // Generate body properties for new template
-                _form.OnSaveRequest += HandleSave;
+                // Note: OnSaveRequest is handled entirely by CreatorForm.SaveProject() which shows its own dialog
                 _form.OnExportRequest += HandleExportMod;
 
                 // 2. Handle Exit (return to Main Menu)
@@ -158,6 +159,26 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             private IntPtr _hwnd;
         }
 
+        // P/Invoke to focus game window after hiding form
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        /// <summary>
+        /// Focuses the game window (used after hiding the editor form).
+        /// </summary>
+        private void FocusGameWindow()
+        {
+            try
+            {
+                var handle = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
+                if (handle != IntPtr.Zero)
+                {
+                    SetForegroundWindow(handle);
+                }
+            }
+            catch { /* Silently ignore focus errors */ }
+        }
+
         // Store reference to the dummy character passed to FaceGen (so we can read from it on pop)
         private CharacterObject? _currentFaceGenCharacter;
         // Track if we're editing max appearance (vs min)
@@ -174,6 +195,7 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             _currentEditingWanderer = wanderer; // Store for later callback
             _isEditingMaxAppearance = isEditingMax; // Store which property we're editing
             _form.Invoke(new Action(() => _form.Hide()));
+            FocusGameWindow();
 
             try
             {
@@ -329,6 +351,7 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             _currentEditingWanderer = null; // Not editing a wanderer directly
             _isEditingMaxAppearance = isEditingMax;
             _form.Invoke(new Action(() => _form.Hide()));
+            FocusGameWindow();
 
             try
             {
@@ -527,6 +550,7 @@ namespace BannerlordExpanded.WandererCreator.Controllers
         private void HandleEditTemplate(EquipmentTemplate template)
         {
             _form.Invoke(new Action(() => _form.Hide()));
+            FocusGameWindow();
             try
             {
                 _currentEditingTemplate = template;
@@ -1014,7 +1038,7 @@ namespace BannerlordExpanded.WandererCreator.Controllers
         private (bool IsValid, string ErrorMessage, string WarningMessage) ValidateProjectForExport(WandererProject project)
         {
             var errors = new List<string>();
-            var warnings = new List<string>();
+            var wandererWarnings = new Dictionary<string, List<string>>();
 
             if (project.Wanderers.Count == 0)
             {
@@ -1023,13 +1047,14 @@ namespace BannerlordExpanded.WandererCreator.Controllers
 
             foreach (var w in project.Wanderers)
             {
-                string wandererPrefix = $"Wanderer '{w.Name ?? "(unnamed)"}'";
+                string wandererName = w.Name ?? "(unnamed)";
+                var currentWarnings = new List<string>();
 
                 if (string.IsNullOrWhiteSpace(w.Id))
-                    errors.Add($"{wandererPrefix}: Missing ID");
+                    errors.Add($"• {wandererName}: Missing ID");
 
                 if (string.IsNullOrWhiteSpace(w.Name))
-                    errors.Add($"{wandererPrefix}: Missing Name");
+                    errors.Add($"• (unnamed): Missing Name");
 
                 bool hasBodyTemplate = !string.IsNullOrEmpty(w.BodyPropertiesTemplateId) &&
                     project.SharedBodyPropertiesTemplates.Any(t => t.Id == w.BodyPropertiesTemplateId &&
@@ -1037,17 +1062,67 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 bool hasDirectBody = !string.IsNullOrEmpty(w.BodyPropertiesString);
 
                 if (!hasBodyTemplate && !hasDirectBody)
-                    errors.Add($"{wandererPrefix}: Missing Body Properties (Set or Create a body template)");
+                    errors.Add($"• {wandererName}: Missing Body Properties (Set or Create a body template)");
 
-                if ((w.BattleTemplateIds == null || w.BattleTemplateIds.Count == 0) &&
-                    (w.CivilianTemplateIds == null || w.CivilianTemplateIds.Count == 0))
+                // Check for localization placeholder IDs ({=!} pattern)
+                var dialogsWithPlaceholder = new List<string>();
+                void CheckDialogLocalization(string dialogName, string dialogText)
                 {
-                    warnings.Add($"{wandererPrefix}: No equipment sets assigned. Default game template will be used.");
+                    if (!string.IsNullOrEmpty(dialogText) && dialogText.Contains("{=!}"))
+                        dialogsWithPlaceholder.Add(dialogName);
+                }
+                CheckDialogLocalization("Intro", w.Dialogs.Intro);
+                CheckDialogLocalization("LifeStory", w.Dialogs.LifeStory);
+                CheckDialogLocalization("LifeStoryB", w.Dialogs.LifeStoryB);
+                CheckDialogLocalization("LifeStoryC", w.Dialogs.LifeStoryC);
+                CheckDialogLocalization("Recruitment", w.Dialogs.Recruitment);
+                CheckDialogLocalization("GenericBackstory", w.Dialogs.GenericBackstory);
+                CheckDialogLocalization("Response1", w.Dialogs.Response1);
+                CheckDialogLocalization("Response2", w.Dialogs.Response2);
+
+                if (dialogsWithPlaceholder.Count > 0)
+                {
+                    currentWarnings.Add($"  ⚠ Placeholder localization IDs ({{=!}}) in: {string.Join(", ", dialogsWithPlaceholder)} — Modders cannot create translations!");
+                }
+
+                // Check equipment sets - provide specific warnings for civilian vs battle
+                bool hasCivilian = w.CivilianTemplateIds != null && w.CivilianTemplateIds.Count > 0;
+                bool hasBattle = w.BattleTemplateIds != null && w.BattleTemplateIds.Count > 0;
+
+                if (!hasCivilian && !hasBattle)
+                {
+                    currentWarnings.Add("  ⚠ Missing both civilian and battle equipment sets — Default game template will be used");
+                }
+                else if (!hasCivilian)
+                {
+                    currentWarnings.Add("  ⚠ Missing civilian equipment set — Default game template will be used");
+                }
+                else if (!hasBattle)
+                {
+                    currentWarnings.Add("  ⚠ Missing battle equipment set — Default game template will be used");
+                }
+
+                if (currentWarnings.Count > 0)
+                {
+                    wandererWarnings[wandererName] = currentWarnings;
                 }
             }
 
+            // Format errors
             string errorMsg = errors.Count > 0 ? string.Join("\n", errors) : "";
-            string warnMsg = warnings.Count > 0 ? string.Join("\n", warnings) : "";
+
+            // Format warnings with grouping by wanderer
+            var warnBuilder = new System.Text.StringBuilder();
+            foreach (var kvp in wandererWarnings)
+            {
+                warnBuilder.AppendLine($"► {kvp.Key}:");
+                foreach (var warning in kvp.Value)
+                {
+                    warnBuilder.AppendLine(warning);
+                }
+                warnBuilder.AppendLine(); // Empty line between wanderers
+            }
+            string warnMsg = warnBuilder.ToString().TrimEnd();
 
             return (errors.Count == 0, errorMsg, warnMsg);
         }
