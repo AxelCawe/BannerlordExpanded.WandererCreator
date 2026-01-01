@@ -128,7 +128,7 @@ namespace BannerlordExpanded.WandererCreator.Patches
             __instance.EquipmentMode = IsCivilianMode ? 0 : 1;
             FileLogger.Log($"SPInventoryVM Patch: Forced EquipmentMode to {__instance.EquipmentMode} (IsCivilianMode: {IsCivilianMode})");
 
-            // Try to hide the equipment mode selector buttons using reflection
+            // Hide the equipment mode selector buttons using reflection
             // The VM may have properties that control visibility of the mode selector
             TryHideEquipmentModeSelector(__instance);
         }
@@ -140,7 +140,7 @@ namespace BannerlordExpanded.WandererCreator.Patches
         {
             try
             {
-                // Try to find and set properties that might hide the mode buttons
+                // Find and set properties that might hide the mode buttons
                 // Common patterns in Gauntlet UI: Is[X]Visible, Is[X]Enabled, Is[X]Active
                 var vmType = vm.GetType();
 
@@ -163,7 +163,6 @@ namespace BannerlordExpanded.WandererCreator.Patches
         }
 
         // NOTE: Previously had patches for UpdateCharacterEquipment, UpdateRightCharacter, and UpdateLeftCharacter
-
         // that blocked these methods from running. These were removed as they prevented equipment from displaying.
         // If null reference crashes occur in these methods, we should add defensive null checks instead of blocking.
 

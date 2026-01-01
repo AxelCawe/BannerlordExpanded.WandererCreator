@@ -20,7 +20,7 @@ namespace BannerlordExpanded.WandererCreator.Services
             string baseDir = Path.Combine(outputFolder, project.ModuleId);
             if (Directory.Exists(baseDir)) Directory.Delete(baseDir, true);
 
-            // 1. Copy Template
+            // Copy Template
             string templateDir = Path.Combine(Environment.CurrentDirectory, "_Module", "ModuleData", "CompanionModTemplate");
             if (Directory.Exists(templateDir))
             {
@@ -31,10 +31,10 @@ namespace BannerlordExpanded.WandererCreator.Services
                 Directory.CreateDirectory(baseDir);
             }
 
-            // 2. Process SubModule.xml
+            // Process SubModule.xml
             SubModuleGenerator.Generate(baseDir, project);
 
-            // 3. Generate XMLs
+            // Generate XMLs
             ModXmlGenerator.CreateEquipmentXml(baseDir, project);
             ModXmlGenerator.CreateStringsXml(baseDir, project);
             ModXmlGenerator.CreateWanderersXml(baseDir, project);

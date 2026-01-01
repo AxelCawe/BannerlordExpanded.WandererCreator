@@ -72,12 +72,43 @@ namespace BannerlordExpanded.WandererCreator.UI
         private RadioButton? _rbBattle;
         private RadioButton? _rbCivilian;
 
+        // Tab pages
+        private TabPage? _tabProjectInfo;
+        private TabPage? _tabWanderers;
+        private TabPage? _tabEquipmentTemplates;
+        private TabPage? _tabSkillTemplates;
+        private TabPage? _tabTraitTemplates;
+        private TabPage? _tabBodyTemplates;
+
         public CreatorForm()
         {
             InitializeComponent();
             Project = null;
             UpdateControlsState();
         }
+
+        /// <summary>
+        /// Generates a sanitized template ID with format: {modname}_{Type}_{Name}
+        /// Replaces dots with underscores, applies capitalization (lowercase, then uppercase after each underscore)
+        /// </summary>
+        private string GenerateTemplateId(string type, string name)
+        {
+            string moduleId = Project?.ModuleId ?? "mod";
+            // Replace dots with underscores
+            string sanitized = moduleId.Replace(".", "_");
+            // Combine parts
+            string raw = $"{sanitized}_{type}_{name}";
+            // Apply capitalization: lowercase all, then uppercase after underscores
+            var result = new System.Text.StringBuilder();
+            bool capitalizeNext = false;
+            foreach (char c in raw.ToLowerInvariant())
+            {
+                if (c == '_') { result.Append(c); capitalizeNext = true; }
+                else { result.Append(capitalizeNext ? char.ToUpperInvariant(c) : c); capitalizeNext = false; }
+            }
+            return result.ToString();
+        }
+
 
         private void InitializeComponent()
         {
@@ -100,35 +131,35 @@ namespace BannerlordExpanded.WandererCreator.UI
             // MAIN TAB CONTROL (Root Layer)
             _mainTabControl = new TabControl() { Dock = DockStyle.Fill, Padding = new Point(10, 5) };
 
-            // 0. PROJECT INFO TAB (First Tab)
-            var tabProjectInfo = new TabPage("Project Info");
-            SetupProjectInfoTab(tabProjectInfo);
-            _mainTabControl.TabPages.Add(tabProjectInfo);
+            // Project Info Tab
+            _tabProjectInfo = new TabPage("Project Info");
+            SetupProjectInfoTab(_tabProjectInfo);
+            _mainTabControl.TabPages.Add(_tabProjectInfo);
 
-            // 1. WANDERER EDITOR TAB
-            var tabWandererEditor = new TabPage("Wanderers");
-            SetupWandererEditorTab(tabWandererEditor);
-            _mainTabControl.TabPages.Add(tabWandererEditor);
+            // Wanderer Editor Tab
+            _tabWanderers = new TabPage("Wanderers");
+            SetupWandererEditorTab(_tabWanderers);
+            _mainTabControl.TabPages.Add(_tabWanderers);
 
-            // 2. SHARED LIBRARY TAB
-            var tabShared = new TabPage("Shared Equipment Templates");
-            SetupSharedTemplatesTab(tabShared);
-            _mainTabControl.TabPages.Add(tabShared);
+            // Equipment Templates Tab
+            _tabEquipmentTemplates = new TabPage("Equipment Templates");
+            SetupSharedTemplatesTab(_tabEquipmentTemplates);
+            _mainTabControl.TabPages.Add(_tabEquipmentTemplates);
 
-            // 3. SHARED SKILL TEMPLATE TAB
-            var tabSharedSkills = new TabPage("Shared Skill Templates");
-            SetupSharedSkillTemplatesTab(tabSharedSkills);
-            _mainTabControl.TabPages.Add(tabSharedSkills);
+            // Skill Templates Tab
+            _tabSkillTemplates = new TabPage("Skill Templates");
+            SetupSharedSkillTemplatesTab(_tabSkillTemplates);
+            _mainTabControl.TabPages.Add(_tabSkillTemplates);
 
-            // 4. SHARED TRAIT TEMPLATE TAB
-            var tabSharedTraits = new TabPage("Shared Trait Templates");
-            SetupSharedTraitTemplatesTab(tabSharedTraits);
-            _mainTabControl.TabPages.Add(tabSharedTraits);
+            // Trait Templates Tab
+            _tabTraitTemplates = new TabPage("Trait Templates");
+            SetupSharedTraitTemplatesTab(_tabTraitTemplates);
+            _mainTabControl.TabPages.Add(_tabTraitTemplates);
 
-            // 5. SHARED BODY TEMPLATES TAB
-            var tabSharedBody = new TabPage("Shared Body Templates");
-            SetupSharedBodyTemplatesTab(tabSharedBody);
-            _mainTabControl.TabPages.Add(tabSharedBody);
+            // Body Templates Tab
+            _tabBodyTemplates = new TabPage("Body Templates");
+            SetupSharedBodyTemplatesTab(_tabBodyTemplates);
+            _mainTabControl.TabPages.Add(_tabBodyTemplates);
 
             // Note: Bottom panel with Save/Export buttons has been removed.
             // Save and Export are now accessible via File menu.
@@ -205,28 +236,11 @@ namespace BannerlordExpanded.WandererCreator.UI
                 Text = "Dependencies are added to SubModule.xml when exporting.\n\nUse 'Scan Now' to manually detect mods or enable auto-scan.",
                 Left = labelX + 410,
                 Top = y + 65,
-                Width = 200,
-                Height = 70,
+                Width = 300,
+                Height = 100,
                 ForeColor = Color.Gray
             };
             tab.Controls.Add(lblDepHint);
-
-            y += 140;
-            // Info Panel
-            var infoLabel = new Label()
-            {
-                Text = "These settings are used when exporting your mod to SubModule.xml.\n\n" +
-                       "• Module ID: A unique identifier for your mod (no spaces or special characters)\n" +
-                       "• Project Name: The display name shown in the game's mod launcher\n" +
-                       "• Version: The version number of your mod\n" +
-                       "• Project URL: An optional link to your mod page (Nexus, ModDB, etc.)",
-                Left = labelX,
-                Top = y,
-                Width = 600,
-                Height = 120,
-                ForeColor = Color.DarkSlateGray
-            };
-            tab.Controls.Add(infoLabel);
         }
 
         private void SetupWandererEditorTab(TabPage tab)
@@ -257,50 +271,9 @@ namespace BannerlordExpanded.WandererCreator.UI
             _wandererList = new ListBox() { Dock = DockStyle.Fill };
             _wandererList.SelectedIndexChanged += (s, e) => SelectWanderer(_wandererList.SelectedItem as WandererDefinition);
 
-            // Add to Panel (Order Correctness for Docking: Buttons first (Bottom), then Label (Top), then List (Fill))
-            // actually Dock priority: first added takes precedence for Top/Bottom/Left/Right? 
-            // Standard: Add Dock.Fill LAST.
-            // Add Dock.Bottom (Buttons).
-            // Add Dock.Top (Label).
-            // Add Dock.Fill (List).
             listPanel.Controls.Add(_wandererList);
             listPanel.Controls.Add(lblList);
             listPanel.Controls.Add(btnPanel);
-            // wait, if I add List (Fill) last, it is Index 0. It docks Last. Fills remaining. Correct.
-            // But Buttons (Bottom) added first (Index 2). Docks First?
-            // "Controls at the bottom of the Z-order are docked first."
-            // Index N (Bottom of Z) = First Added.
-            // So First Added -> Docks First.
-            // 1. Add(ButtonPanel) -> Index N. Docks Bottom.
-            // 2. Add(Label) -> Index N-1. Docks Top (of remaining).
-            // 3. Add(List) -> Index 0. Docks Fill (of remaining).
-            // PERFECT.
-
-            // Correction in code block below:
-            // I need to reverse the Add calls in my implementation plan above? 
-            // Code:
-            // listPanel.Controls.Add(btnPanel); // Added first. Index high. Docks First (Bottom).
-            // listPanel.Controls.Add(lblList); // Docks Top.
-            // listPanel.Controls.Add(_wandererList); // Docks Fill.
-
-            // Wait, `Controls.Add` ADDS TO INDEX 0.
-            // So `btnPanel` becomes Index 0.
-            // Then `lblList` becomes Index 0. `btnPanel` becomes Index 1.
-            // Then `_wandererList` becomes Index 0.
-            // So Z-Order: List(0), Label(1), Btn(2).
-            // Docking Order (Bottom of Z to Top): Btn(2), Label(1), List(0).
-            // Btn(2) [Bottom] -> Takes bottom slice.
-            // Label(1) [Top] -> Takes top slice of remaining.
-            // List(0) [Fill] -> Takes center.
-            // CORRECT. 
-            // So valid order is: Add(Panel), Add(Label), Add(List).
-
-            // DO NOT change the ReplacementContent logic. 
-            // The ReplacementContent below:
-            // listPanel.Controls.Add(btnPanel);
-            // listPanel.Controls.Add(lblList);
-            // listPanel.Controls.Add(_wandererList);
-            // This is correct.
 
 
             split.Panel1.Controls.Add(listPanel);
@@ -430,7 +403,7 @@ namespace BannerlordExpanded.WandererCreator.UI
 
             var rbCustom = new RadioButton() { Text = "Create New Template", Left = 20, Top = 80, AutoSize = true };
             var lblId = new Label() { Text = "New ID:", Left = 40, Top = 105, AutoSize = true };
-            var txtId = new TextBox() { Text = "skill_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), Left = 110, Top = 100, Width = 230 };
+            var txtId = new TextBox() { Text = GenerateTemplateId("Skill", "New" + ((Project?.SharedSkillTemplates.Count ?? 0) + 1)), Left = 110, Top = 100, Width = 230 };
 
             var rbClear = new RadioButton() { Text = "Clear (No Template)", Left = 20, Top = 135, AutoSize = true };
 
@@ -701,20 +674,30 @@ namespace BannerlordExpanded.WandererCreator.UI
             var buttonPanel = new FlowLayoutPanel() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(10, 40, 10, 10) };
 
             var btnCreateBattle = new Button() { Text = "New Battle Template", Width = 170, Height = 35, Margin = new Padding(0, 0, 0, 5) };
-            btnCreateBattle.Click += (s, e) => PromptGenericText("New Battle Template ID", "battle_eq_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) =>
+            btnCreateBattle.Click += (s, e) =>
             {
-                AddTemplate(id, isCivilian: false);
-                var created = Project?.SharedTemplates.FirstOrDefault(t => t.Id == id);
-                if (created != null) OnEditTemplateRequest?.Invoke(created);
-            });
+                int count = Project?.SharedTemplates.Count(t => !t.IsCivilian) ?? 0;
+                string defaultId = GenerateTemplateId("Equip", "Battle" + (count + 1));
+                PromptGenericText("New Battle Template ID", defaultId, (id) =>
+                {
+                    AddTemplate(id, isCivilian: false);
+                    var created = Project?.SharedTemplates.FirstOrDefault(t => t.Id == id);
+                    if (created != null) OnEditTemplateRequest?.Invoke(created);
+                });
+            };
 
             var btnCreateCivilian = new Button() { Text = "New Civilian Template", Width = 170, Height = 35, Margin = new Padding(0, 0, 0, 15) };
-            btnCreateCivilian.Click += (s, e) => PromptGenericText("New Civilian Template ID", "civilian_eq_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) =>
+            btnCreateCivilian.Click += (s, e) =>
             {
-                AddTemplate(id, isCivilian: true);
-                var created = Project?.SharedTemplates.FirstOrDefault(t => t.Id == id);
-                if (created != null) OnEditTemplateRequest?.Invoke(created);
-            });
+                int count = Project?.SharedTemplates.Count(t => t.IsCivilian) ?? 0;
+                string defaultId = GenerateTemplateId("Equip", "Civ" + (count + 1));
+                PromptGenericText("New Civilian Template ID", defaultId, (id) =>
+                {
+                    AddTemplate(id, isCivilian: true);
+                    var created = Project?.SharedTemplates.FirstOrDefault(t => t.Id == id);
+                    if (created != null) OnEditTemplateRequest?.Invoke(created);
+                });
+            };
 
             var btnDelete = new Button() { Text = "Delete Selected", Width = 170, Height = 35, Margin = new Padding(0, 0, 0, 5) };
             btnDelete.Click += (s, e) => RemoveTemplate();
@@ -795,13 +778,18 @@ namespace BannerlordExpanded.WandererCreator.UI
             var rightPanel = new FlowLayoutPanel() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(20) };
 
             var btnCreate = new Button() { Text = "Create New Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
-            btnCreate.Click += (s, e) => PromptGenericText("New Skill Template ID", "skill_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) =>
+            btnCreate.Click += (s, e) =>
             {
-                AddSkillTemplate(id);
-                // Open editor for the newly created skill template
-                var created = Project?.SharedSkillTemplates.FirstOrDefault(t => t.Id == id);
-                if (created != null) PromptEditSkills(created);
-            });
+                int count = Project?.SharedSkillTemplates.Count ?? 0;
+                string defaultId = GenerateTemplateId("Skill", "New" + (count + 1));
+                PromptGenericText("New Skill Template ID", defaultId, (id) =>
+                {
+                    AddSkillTemplate(id);
+                    // Open editor for the newly created skill template
+                    var created = Project?.SharedSkillTemplates.FirstOrDefault(t => t.Id == id);
+                    if (created != null) PromptEditSkills(created);
+                });
+            };
 
             var btnDelete = new Button() { Text = "Delete Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
             btnDelete.Click += (s, e) => RemoveSkillTemplate();
@@ -1010,7 +998,12 @@ namespace BannerlordExpanded.WandererCreator.UI
             var rightPanel = new FlowLayoutPanel() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, Padding = new Padding(20) };
 
             var btnCreate = new Button() { Text = "Create New Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
-            btnCreate.Click += (s, e) => PromptGenericText("New Trait Template ID", "trait_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), (id) => AddTraitTemplate(id));
+            btnCreate.Click += (s, e) =>
+            {
+                int count = Project?.SharedTraitTemplates.Count ?? 0;
+                string defaultId = GenerateTemplateId("Trait", "New" + (count + 1));
+                PromptGenericText("New Trait Template ID", defaultId, (id) => AddTraitTemplate(id));
+            };
 
             var btnDelete = new Button() { Text = "Delete Template", Width = 180, Height = 40, Margin = new Padding(0, 0, 0, 10) };
             btnDelete.Click += (s, e) =>
@@ -1214,7 +1207,8 @@ namespace BannerlordExpanded.WandererCreator.UI
             var f = new Form() { Text = "Create Body Template", Width = 350, Height = 180, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false };
 
             var lblId = new Label() { Text = "Template ID:", Left = 20, Top = 20, AutoSize = true };
-            var txtId = new TextBox() { Text = "body_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), Left = 120, Top = 17, Width = 200 };
+            int count = Project?.SharedBodyPropertiesTemplates.Count ?? 0;
+            var txtId = new TextBox() { Text = GenerateTemplateId("Body", "New" + (count + 1)), Left = 120, Top = 17, Width = 200 };
 
             var lblGender = new Label() { Text = "Gender:", Left = 20, Top = 55, AutoSize = true };
             var cbFemale = new CheckBox() { Text = "Female", Left = 120, Top = 52, AutoSize = true };
@@ -1253,11 +1247,26 @@ namespace BannerlordExpanded.WandererCreator.UI
         public void RefreshBodyTemplateList()
         {
             if (_bodyTemplateList == null) return;
+
+            // Preserve current selection if possible
+            var currentSelection = _bodyTemplateList.SelectedItem as BodyPropertiesTemplate;
+            string currentId = currentSelection?.Id;
+
             _bodyTemplateList.DataSource = null;
             if (Project != null)
             {
                 _bodyTemplateList.DataSource = Project.SharedBodyPropertiesTemplates;
                 _bodyTemplateList.DisplayMember = "Name";
+
+                // Re-select logic
+                if (currentId != null)
+                {
+                    var reSelect = Project.SharedBodyPropertiesTemplates.FirstOrDefault(t => t.Id == currentId);
+                    if (reSelect != null)
+                    {
+                        _bodyTemplateList.SelectedItem = reSelect;
+                    }
+                }
             }
             UpdateBodyTemplateDetails();
         }
@@ -1278,7 +1287,7 @@ namespace BannerlordExpanded.WandererCreator.UI
 
             var rbCustom = new RadioButton() { Text = "Create New Template", Left = 20, Top = 80, AutoSize = true };
             var lblId = new Label() { Text = "New ID:", Left = 40, Top = 105, AutoSize = true };
-            var txtId = new TextBox() { Text = "body_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), Left = 110, Top = 100, Width = 230 };
+            var txtId = new TextBox() { Text = GenerateTemplateId("Body", "New" + ((Project?.SharedBodyPropertiesTemplates.Count ?? 0) + 1)), Left = 110, Top = 100, Width = 230 };
 
             var rbClear = new RadioButton() { Text = "Clear (No Template)", Left = 20, Top = 135, AutoSize = true };
 
@@ -1314,19 +1323,15 @@ namespace BannerlordExpanded.WandererCreator.UI
                         AddBodyTemplate(rawId, SelectedWanderer.IsFemale);
                         SelectedWanderer.BodyPropertiesTemplateId = rawId;
 
-                        // Switch to Shared Body Templates tab and select the new template
-                        if (_mainTabControl != null && _bodyTemplateList != null)
+                        // Switch to Body Templates tab and select the new template
+                        if (_tabBodyTemplates != null)
                         {
-                            // Find and switch to the Shared Body Templates tab
-                            foreach (TabPage tab in _mainTabControl.TabPages)
-                            {
-                                if (tab.Text == "Shared Body Templates")
-                                {
-                                    _mainTabControl.SelectedTab = tab;
-                                    break;
-                                }
-                            }
-                            // Select the new template in the list by ID
+                            _mainTabControl.SelectedTab = _tabBodyTemplates;
+                        }
+                        // Refresh and select the new template in the list by ID
+                        RefreshBodyTemplateList();
+                        if (_bodyTemplateList != null)
+                        {
                             var createdTemplate = Project.SharedBodyPropertiesTemplates.FirstOrDefault(t => t.Id == rawId);
                             if (createdTemplate != null) _bodyTemplateList.SelectedItem = createdTemplate;
                         }
@@ -1368,7 +1373,7 @@ namespace BannerlordExpanded.WandererCreator.UI
 
             var rbCustom = new RadioButton() { Text = "Create New Template", Left = 20, Top = 80, AutoSize = true };
             var lblId = new Label() { Text = "New ID:", Left = 40, Top = 105, AutoSize = true };
-            var txtId = new TextBox() { Text = "trait_template_" + Guid.NewGuid().ToString("N").Substring(0, 8), Left = 110, Top = 100, Width = 230 };
+            var txtId = new TextBox() { Text = GenerateTemplateId("Trait", "New" + ((Project?.SharedTraitTemplates.Count ?? 0) + 1)), Left = 110, Top = 100, Width = 230 };
 
             var rbClear = new RadioButton() { Text = "Clear (No Template)", Left = 20, Top = 135, AutoSize = true };
 
@@ -1551,8 +1556,11 @@ namespace BannerlordExpanded.WandererCreator.UI
             cbTemplates.DisplayMember = "Name";
             var rbCustom = new RadioButton() { Text = "Create New Set", Left = 20, Top = 80, AutoSize = true };
             var lblId = new Label() { Text = "Custom ID:", Left = 40, Top = 105, AutoSize = true };
-            var suffix = isCivilian ? "civ" : "battle";
-            var txtId = new TextBox() { Text = $"eq_{suffix}_custom_{SelectedWanderer.Id}_{Guid.NewGuid().ToString("N").Substring(0, 4)}", Left = 110, Top = 100, Width = 230 };
+            var suffix = isCivilian ? "Civ" : "Battle";
+            int eqCount = isCivilian
+                ? (Project?.SharedTemplates.Count(t => t.IsCivilian) ?? 0)
+                : (Project?.SharedTemplates.Count(t => !t.IsCivilian) ?? 0);
+            var txtId = new TextBox() { Text = GenerateTemplateId("Equip", suffix + (eqCount + 1)), Left = 110, Top = 100, Width = 230 };
             var btnOk = new Button() { Text = "Add", Left = 200, Top = 160, Width = 80, DialogResult = DialogResult.OK };
             var btnCancel = new Button() { Text = "Cancel", Left = 290, Top = 160, Width = 80, DialogResult = DialogResult.Cancel };
             f.Controls.Add(rbShared); f.Controls.Add(cbTemplates);
@@ -1821,7 +1829,23 @@ namespace BannerlordExpanded.WandererCreator.UI
             if (!hasProject) { ResetInputs(); _wandererList.DataSource = null; }
         }
 
-        private void AddWanderer() { if (Project == null) return; var w = new WandererDefinition() { Name = "New Wanderer" }; Project.Wanderers.Add(w); RefreshList(); SelectWanderer(w); }
+        private void AddWanderer()
+        {
+            if (Project == null) return;
+            int count = Project.Wanderers.Count;
+            string id = GenerateTemplateId("Wanderer", "New" + (count + 1));
+            var w = new WandererDefinition() { Id = id, Name = "{FIRSTNAME} the new Wanderer" };
+
+            // Fix: Default to the first available culture if possible
+            if (AvailableCultures != null && AvailableCultures.Count > 0)
+            {
+                w.Culture = AvailableCultures[0];
+            }
+
+            Project.Wanderers.Add(w);
+            RefreshList();
+            SelectWanderer(w);
+        }
         private void RemoveWanderer()
         {
             if (SelectedWanderer == null || Project == null) return;

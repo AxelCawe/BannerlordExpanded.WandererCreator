@@ -12,7 +12,7 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
             string path = Path.Combine(baseDir, "SubModule.xml");
             XDocument doc;
 
-            // 1. Load or Create Document
+            // Load or Create Document
             if (File.Exists(path))
             {
                 try
@@ -29,7 +29,7 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
                 doc = CreateDefaultTemplate();
             }
 
-            // 2. Update Core Attributes (Name, Id, Version)
+            // Update Core Attributes (Name, Id, Version)
             var moduleNode = doc.Descendants("Module").FirstOrDefault();
             if (moduleNode != null)
             {
@@ -52,7 +52,7 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
                     subModulesNode.Remove();
                 }
 
-                // 3. Inject XML Declarations
+                // Inject XML Declarations
                 var xmlsNode = moduleNode.Element("Xmls");
                 if (xmlsNode == null)
                 {
@@ -64,7 +64,7 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
                 EnsureXmlNode(xmlsNode, "EquipmentRosters", "wanderer_equipment");
                 EnsureXmlNode(xmlsNode, "GameText", "wanderer_strings");
 
-                // 4. Add detected mod dependencies
+                // Add detected mod dependencies
                 var dependedModulesNode = moduleNode.Element("DependedModules");
                 if (dependedModulesNode != null && project.DetectedDependencies != null)
                 {
@@ -101,7 +101,7 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
 
         private static XDocument CreateDefaultTemplate()
         {
-            // Simplified template construction (XML-only, no SubModules)
+            // Template construction
             return XDocument.Parse(@"<Module>
     <Name value=""My Mod""/>
     <Id value=""MyMod""/>

@@ -48,7 +48,15 @@ namespace BannerlordExpanded.WandererCreator.UI
                     LoadingWindow.DisableGlobalLoadingWindow();
                 }
             }
-            catch { }
+            catch (System.Exception ex)
+            {
+                FileLogger.Log($"Warning: Failed to disable loading window: {ex.Message}");
+                System.Windows.Forms.MessageBox.Show(
+                    $"Failed to disable loading window. The mod may not work correctly.\n\nError: {ex.Message}",
+                    "Wanderer Creator Warning",
+                    System.Windows.Forms.MessageBoxButtons.OK,
+                    System.Windows.Forms.MessageBoxIcon.Warning);
+            }
         }
 
         protected override void OnActivate()
@@ -74,7 +82,15 @@ namespace BannerlordExpanded.WandererCreator.UI
                 {
                     _sceneLayer.SceneView?.SetEnable(false);
                 }
-                catch { }
+                catch (System.Exception ex)
+                {
+                    FileLogger.Log($"Warning: Failed to disable scene view: {ex.Message}");
+                    System.Windows.Forms.MessageBox.Show(
+                        $"Failed to disable scene view. The mod may not work correctly.\n\nError: {ex.Message}",
+                        "Wanderer Creator Warning",
+                        System.Windows.Forms.MessageBoxButtons.OK,
+                        System.Windows.Forms.MessageBoxIcon.Warning);
+                }
             }
         }
 

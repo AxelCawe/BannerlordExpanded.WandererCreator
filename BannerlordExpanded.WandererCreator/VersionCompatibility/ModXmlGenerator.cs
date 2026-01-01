@@ -175,7 +175,7 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
             {
                 writer.WriteStartElement("EquipmentRosters");
 
-                // 1. Export Shared Templates
+                // Export Shared Templates
                 if (project.SharedTemplates != null)
                 {
                     foreach (var tmpl in project.SharedTemplates)
@@ -286,6 +286,8 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
         {
             writer.WriteStartElement("EquipmentRoster");
             writer.WriteAttributeString("id", id);
+
+            writer.WriteStartElement("EquipmentSet");
             if (civilian) writer.WriteAttributeString("civilian", "true");
 
             foreach (var kvp in equipment)
@@ -293,11 +295,77 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
                 if (string.IsNullOrEmpty(kvp.Value)) continue;
 
                 writer.WriteStartElement("Equipment");
-                writer.WriteAttributeString("slot", kvp.Key);
+                writer.WriteAttributeString("slot", GetXmlSlotName(kvp.Key));
                 writer.WriteAttributeString("id", kvp.Value);
                 writer.WriteEndElement();
             }
-            writer.WriteEndElement();
+            writer.WriteEndElement(); // EquipmentSet
+
+            // Flags
+            writer.WriteStartElement("Flags");
+            if (civilian) writer.WriteAttributeString("IsCivilianTemplate", "true");
+            writer.WriteAttributeString("IsCombatantTemplate", "true");
+            writer.WriteAttributeString("IsWandererEquipment", "true");
+            writer.WriteEndElement(); // Flags
+
+            writer.WriteEndElement(); // EquipmentRoster
+        }
+
+        private static string GetXmlSlotName(string internalKey)
+        {
+            // Handle integer strings (legacy or direct index)
+            if (int.TryParse(internalKey, out int index))
+            {
+                return GetXmlSlotNameFromIndex(index);
+            }
+
+            // Handle Enum names and common variations
+            switch (internalKey)
+            {
+                case "Weapon0":
+                case "WeaponItemBeginSlot":
+                    return "Item0";
+                case "Weapon1":
+                    return "Item1";
+                case "Weapon2":
+                    return "Item2";
+                case "Weapon3":
+                    return "Item3";
+                case "ExtraWeaponSlot":
+                    return "Item4";
+                case "Head":
+                    return "Head";
+                case "Body":
+                case "Cape":
+                case "Gloves":
+                case "Leg":
+                case "Horse":
+                case "HorseHarness":
+                    return internalKey;
+                default:
+                    // If it matches standard XML slot names, return it
+                    return internalKey;
+            }
+        }
+
+        private static string GetXmlSlotNameFromIndex(int index)
+        {
+            switch (index)
+            {
+                case 0: return "Item0";
+                case 1: return "Item1";
+                case 2: return "Item2";
+                case 3: return "Item3";
+                case 4: return "Item4";
+                case 5: return "Head";
+                case 6: return "Body";
+                case 7: return "Leg";
+                case 8: return "Gloves";
+                case 9: return "Cape";
+                case 10: return "Horse";
+                case 11: return "HorseHarness";
+                default: return "Item0";
+            }
         }
 
         /// <summary>

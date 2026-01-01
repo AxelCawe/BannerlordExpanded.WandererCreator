@@ -42,7 +42,7 @@ namespace BannerlordExpanded.WandererCreator.Services
                 string itemId = kvp.Value;
                 if (string.IsNullOrEmpty(itemId)) continue;
 
-                // Try to get the source module for this item
+                // Get the source module for this item
                 if (GameApiWrapper.TryGetItemSourceModule(itemId, out string moduleId))
                 {
                     // Skip core modules
@@ -54,7 +54,7 @@ namespace BannerlordExpanded.WandererCreator.Services
                         var moduleInfo = GameApiWrapper.GetModuleInfo(moduleId);
                         string version = "";
 
-                        // Try to get the version from ModuleInfo
+                        // Get the version from ModuleInfo
                         if (moduleInfo != null)
                         {
                             try

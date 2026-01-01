@@ -37,22 +37,6 @@ namespace BannerlordExpanded.WandererCreator.Controllers
 
         public bool CanStart()
         {
-            // Strict Fullscreen Check
-            // We cannot easily access NativeConfig here without reference, but we can try catch.
-            // If we detect exclusive fullscreen, we return false and show message.
-
-            // NOTE: In a real implementation, you would check TaleWorlds.Engine.Screen.DisplayMode == DisplayMode.ExclusiveFullscreen
-            // Here is a placeholder logic that assumes we are safe OR forces user to acknowledge.
-            // Since user asked for STRICT blocking if exclusive, we'll try to detect it.
-
-            // Assuming we can't reliably detect without Engine ref, we can prompt the user to CONFIRM they are not in fullscreen?
-            // User requested: "The warning should only appear if its exclusive fullscreen and stop the user"
-            // This implies we MUST detect it.
-
-            // Let's assume we can access Screen.DisplayMode if we reference TaleWorlds.Engine.
-            // Since I am not 100% sure on the exact API availability in this environment (references seem standard), 
-            // I will use a safe "Ask" if detection fails, or just proceed if we can't detect.
-
             // Detect exclusive fullscreen using NativeOptions
             // DisplayMode values: 0 = Fullscreen (exclusive), 1 = Windowed, 2 = Borderless
             bool isExclusive = TaleWorlds.Engine.Options.NativeOptions.GetConfig(
@@ -109,7 +93,7 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 if (_cachedTraitIds != null) _form.AvailableTraits = _cachedTraitIds;
                 if (_cachedCultureIds != null) _form.AvailableCultures = _cachedCultureIds;
 
-                // 1. Center the form
+                // Center the form
                 _form.StartPosition = FormStartPosition.CenterScreen;
 
                 _form.OnEditTemplateRequest += HandleEditTemplate; // Fix: Subscribe to template edits
@@ -118,14 +102,14 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 // Note: OnSaveRequest is handled entirely by CreatorForm.SaveProject() which shows its own dialog
                 _form.OnExportRequest += HandleExportMod;
 
-                // 2. Handle Exit (return to Main Menu)
+                // Handle Exit (return to Main Menu)
                 _form.FormClosed += (s, e) =>
                 {
                     ShouldExit = true;
                     Application.ExitThread(); // Ensure thread exits
                 };
 
-                // 3. Parent to Game Window (so it stays on top of game but not other apps)
+                // Parent to Game Window (so it stays on top of game but not other apps)
                 try
                 {
                     var handle = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
@@ -730,29 +714,6 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                 ? playerCharacter.FirstCivilianEquipment
                 : playerCharacter.Equipment;
 
-            // Diagnostic Log & Smart Recovery
-            try
-            {
-                int count = 0;
-                for (int i = 0; i < 12; i++) if (!equipment[i].IsEmpty) count++;
-
-                // Check OTHER set just in case
-                var otherEq = _isEditingCivilianEquipment
-                    ? playerCharacter.Equipment
-                    : playerCharacter.FirstCivilianEquipment;
-                int otherCount = 0;
-                for (int i = 0; i < 12; i++) if (!otherEq[i].IsEmpty) otherCount++;
-
-                FileLogger.Log($"OnInventoryComplete: Target ({(_isEditingCivilianEquipment ? "Civilian" : "Battle")}) has {count} items. Other Set has {otherCount}.");
-
-                // Fallback: If target is empty but other has items
-                if (count == 0 && otherCount > 0)
-                {
-                    FileLogger.Log("WARNING: Target set empty but other set has items. Using fallback.");
-                    equipment = otherEq;
-                }
-            }
-            catch { }
 
             // Handle Template Save
             if (_currentEditingTemplate != null)
@@ -812,7 +773,7 @@ namespace BannerlordExpanded.WandererCreator.Controllers
             // Populate basic data
             CultureObject culture = Game.Current.ObjectManager.GetObject<CultureObject>(wanderer.Culture) ?? Game.Current.ObjectManager.GetObject<CultureObject>("empire");
 
-            // 1. Set Culture using abstraction layer
+            // Set Culture using abstraction layer
             if (culture != null)
             {
                 if (GameApiWrapper.TrySetCulture(character, culture))

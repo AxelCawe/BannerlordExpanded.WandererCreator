@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using BannerlordExpanded.WandererCreator.Helpers;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.Conversation;
 using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
 using TaleWorlds.ObjectSystem;
@@ -550,6 +553,100 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
             {
                 FileLogger.Log($"[GameApiWrapper] Error getting module info for '{moduleId}': {ex.Message}");
                 return null;
+            }
+        }
+
+        #endregion
+
+        #region Testing Operations
+
+        /// <summary>
+        /// Reveals all wanderers in the encyclopedia so they can be found easily.
+        /// Used for testing/debugging wanderer mods.
+        /// </summary>
+        public static void RevealAllWanderers()
+        {
+            if (Campaign.Current == null)
+            {
+                TaleWorlds.Library.InformationManager.DisplayMessage(new TaleWorlds.Library.InformationMessage(
+                    "Please load a campaign first.", TaleWorlds.Library.Colors.Red));
+                return;
+            }
+
+            int count = 0;
+            foreach (var hero in Hero.AllAliveHeroes)
+            {
+                if (hero.IsWanderer)
+                {
+                    if (!hero.IsKnownToPlayer)
+                    {
+                        hero.IsKnownToPlayer = true;
+                        count++;
+                    }
+
+                    // Update location for encyclopedia using the campaign behavior
+                    if (hero.CurrentSettlement != null)
+                    {
+                        UpdateHeroLocation(hero);
+                    }
+                }
+            }
+
+            TaleWorlds.Library.InformationManager.DisplayMessage(new TaleWorlds.Library.InformationMessage(
+                $"Revealed {count} new wanderers. Updated locations for all wanderers.", TaleWorlds.Library.Colors.Green));
+
+            FileLogger.Log($"[GameApiWrapper] Revealed {count} wanderers in encyclopedia and updated locations.");
+        }
+
+        /// <summary>
+        /// Updates the "Last Seen" location for a hero using HeroKnownInformationCampaignBehavior.
+        /// This is required because simply setting LastSeenPlace is not sufficient or accessible in all versions.
+        /// </summary>
+        private static void UpdateHeroLocation(Hero hero)
+        {
+            try
+            {
+                // Find the behavior type
+                Type? behaviorType = null;
+                foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    behaviorType = assembly.GetTypes().FirstOrDefault(t => t.Name == "HeroKnownInformationCampaignBehavior");
+                    if (behaviorType != null) break;
+                }
+
+                if (behaviorType == null)
+                {
+                    FileLogger.Log("[GameApiWrapper] Could not find type 'HeroKnownInformationCampaignBehavior'.");
+                    return;
+                }
+
+                // Get the behavior instance from Campaign
+                object? behaviorInstance = null;
+                var getBehaviorMethod = typeof(Campaign).GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .FirstOrDefault(m => m.Name == "GetCampaignBehavior" && m.IsGenericMethodDefinition);
+
+                if (getBehaviorMethod != null)
+                {
+                    var genericMethod = getBehaviorMethod.MakeGenericMethod(behaviorType);
+                    behaviorInstance = genericMethod.Invoke(Campaign.Current, null);
+                }
+
+                if (behaviorInstance != null)
+                {
+                    // Call private void UpdateHeroLocation(Hero hero)
+                    if (!ReflectionHelper.TryInvokeMethod(behaviorInstance, new[] { "UpdateHeroLocation" }, out _, hero))
+                    {
+                        FileLogger.Log("[GameApiWrapper] Found behavior, but could not invoke 'UpdateHeroLocation' method.");
+                    }
+                }
+                else
+                {
+                    FileLogger.Log("[GameApiWrapper] Could not retrieve HeroKnownInformationCampaignBehavior instance from Campaign.");
+                }
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log($"[GameApiWrapper] Error updating hero location: {ex.Message}");
             }
         }
 

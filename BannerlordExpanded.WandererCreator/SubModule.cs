@@ -50,6 +50,9 @@ namespace BannerlordExpanded.WandererCreator
 
             // Log version compatibility status
             VersionCheck.LogVersionStatus();
+
+            // Validate critical APIs are accessible
+            ApiValidator.ValidateAll();
         }
 
         protected override void OnSubModuleUnloaded()

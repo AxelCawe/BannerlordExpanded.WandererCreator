@@ -22,5 +22,15 @@ namespace BannerlordExpanded.WandererCreator
             }
             catch { }
         }
+
+        public static void Clear()
+        {
+            try
+            {
+                if (File.Exists(LogPath))
+                    File.Delete(LogPath);
+            }
+            catch { }
+        }
     }
 }

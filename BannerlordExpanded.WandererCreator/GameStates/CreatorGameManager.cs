@@ -62,13 +62,26 @@ namespace BannerlordExpanded.WandererCreator.GameStates
         public override void OnLoadFinished()
         {
             base.OnLoadFinished();
+
+            // Clear log file at start of each game session (not editor)
+            FileLogger.Clear();
+
             FileLogger.Log("OnLoadFinished called");
 
             // Mark that Wanderer Creator is active (for Harmony patches)
             Patches.InventoryPatches.IsCreatorActive = true;
 
             // Explicitly disable any lingering loading screen
-            try { TaleWorlds.Engine.Utilities.DisableGlobalLoadingWindow(); } catch { }
+            try { TaleWorlds.Engine.Utilities.DisableGlobalLoadingWindow(); }
+            catch (System.Exception ex)
+            {
+                FileLogger.Log($"Warning: Failed to disable loading window: {ex.Message}");
+                System.Windows.Forms.MessageBox.Show(
+                    $"Failed to disable loading window. The mod may not work correctly.\n\nError: {ex.Message}",
+                    "Wanderer Creator Warning",
+                    System.Windows.Forms.MessageBoxButtons.OK,
+                    System.Windows.Forms.MessageBoxIcon.Warning);
+            }
 
             // FORCE LOAD VITAL XMLs (If they were missed by customized loading)
             try
