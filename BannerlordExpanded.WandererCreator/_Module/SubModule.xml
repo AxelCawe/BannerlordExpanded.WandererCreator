@@ -3,7 +3,7 @@
         xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/BUTR/Bannerlord.XmlSchemas/master/SubModule.xsd" >
   <Id value="$moduleid$" />
   <Name value="$modulename$" />
-  <Version value="v$version$" />
+  <Version value="e1.0.0" />
   <DefaultModule value="false" />
   <ModuleCategory value="Singleplayer"/>
   <ModuleType value="Community" />
@@ -31,9 +31,9 @@
   <!-- Community Dependency Metadata -->
   <SubModules>
     <SubModule>
-      <Name value="$modulename$" />
-      <DLLName value="$modulename$.dll" />
-      <SubModuleClassType value="$modulename$.SubModule" />
+      <Name value="$moduleid$" />
+      <DLLName value="$moduleid$.dll" />
+      <SubModuleClassType value="$moduleid$.SubModule" />
       <Tags />
     </SubModule>
   </SubModules>

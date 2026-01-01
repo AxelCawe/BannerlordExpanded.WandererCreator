@@ -113,7 +113,7 @@ namespace BannerlordExpanded.WandererCreator.UI
         private void InitializeComponent()
         {
             this.Text = "Wanderer Creator (Bannerlord)";
-            this.Size = new Size(1100, 800); // Increased size
+            this.Size = new Size(1100, 600); // Increased size
             this.TopMost = false; // Ensure it's not always on top
 
             // Menu
@@ -125,6 +125,20 @@ namespace BannerlordExpanded.WandererCreator.UI
             fileMenu.DropDownItems.Add(new ToolStripSeparator());
             fileMenu.DropDownItems.Add(new ToolStripMenuItem("Export Mod", null, (s, e) => ExportMod()));
             _menuStrip.Items.Add(fileMenu);
+
+            var helpMenu = new ToolStripMenuItem("Help");
+            helpMenu.DropDownItems.Add(new ToolStripMenuItem("Online Guide", null, (s, e) =>
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/AxelCawe/BannerlordExpanded.WandererCreator/wiki/Wanderer-Creator-Guide") { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Unable to open link: " + ex.Message);
+                }
+            }));
+            _menuStrip.Items.Add(helpMenu);
             this.MainMenuStrip = _menuStrip;
             this.Controls.Add(_menuStrip);
 

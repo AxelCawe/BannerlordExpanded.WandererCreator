@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <Version>0.0.1</Version>
@@ -9,12 +9,12 @@
     <BuildForWindows>false</BuildForWindows>
     <BuildForWindowsStore>false</BuildForWindowsStore>
     <ModuleId>$(MSBuildProjectName)</ModuleId>
-    <ModuleName>$(MSBuildProjectName)</ModuleName>
+    <ModuleName>Bannerlord Expanded - Wanderer Creator</ModuleName>
     <ModuleUrl></ModuleUrl>
 	<GameFolder>C:\Program Files (x86)\Steam\steamapps\common\Mount &amp; Blade II Bannerlord</GameFolder>
     <GameBinariesFolder Condition="Exists('$(GameFolder)\bin\Win64_Shipping_Client\Bannerlord.exe')">Win64_Shipping_Client</GameBinariesFolder>
     <GameBinariesFolder Condition="Exists('$(GameFolder)\bin\Gaming.Desktop.x64_Shipping_Client\Bannerlord.exe')">Gaming.Desktop.x64_Shipping_Client</GameBinariesFolder>
-    <GameVersion>1.3.11</GameVersion>
+    <GameVersion>1.3.13</GameVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="$(TargetFramework) == 'net472'">
