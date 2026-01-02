@@ -1,11 +1,10 @@
+using BannerlordExpanded.WandererCreator.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
-using BannerlordExpanded.WandererCreator.Helpers;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
-using TaleWorlds.CampaignSystem.Conversation;
 using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
 using TaleWorlds.ObjectSystem;
@@ -621,16 +620,8 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
                 }
 
                 // Get the behavior instance from Campaign
-                object? behaviorInstance = null;
-                var getBehaviorMethod = typeof(Campaign).GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                    .FirstOrDefault(m => m.Name == "GetCampaignBehavior" && m.IsGenericMethodDefinition);
 
-                if (getBehaviorMethod != null)
-                {
-                    var genericMethod = getBehaviorMethod.MakeGenericMethod(behaviorType);
-                    behaviorInstance = genericMethod.Invoke(Campaign.Current, null);
-                }
-
+                HeroKnownInformationCampaignBehavior behaviorInstance = Campaign.Current.GetCampaignBehavior<HeroKnownInformationCampaignBehavior>();
                 if (behaviorInstance != null)
                 {
                     // Call private void UpdateHeroLocation(Hero hero)

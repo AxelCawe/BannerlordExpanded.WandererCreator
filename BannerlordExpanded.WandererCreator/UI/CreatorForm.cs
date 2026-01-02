@@ -410,7 +410,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             if (Project == null || SelectedWanderer == null) return;
             var f = new Form() { Text = "Set Skill Template", Width = 400, Height = 250, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false };
 
-            var rbShared = new RadioButton() { Text = "Use Shared Template", Left = 20, Top = 20, AutoSize = true, Checked = true };
+            var rbShared = new RadioButton() { Text = "Use Existing Template", Left = 20, Top = 20, AutoSize = true, Checked = true };
             var cbTemplates = new ComboBox() { Left = 40, Top = 45, Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
             cbTemplates.DataSource = Project.SharedSkillTemplates;
             cbTemplates.DisplayMember = "Name";
@@ -1290,7 +1290,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             if (Project == null || SelectedWanderer == null) return;
             var f = new Form() { Text = "Set Body Template", Width = 400, Height = 250, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false };
 
-            var rbShared = new RadioButton() { Text = "Use Shared Template", Left = 20, Top = 20, AutoSize = true, Checked = true };
+            var rbShared = new RadioButton() { Text = "Use Existing Template", Left = 20, Top = 20, AutoSize = true, Checked = true };
             var cbTemplates = new ComboBox() { Left = 40, Top = 45, Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
             // Filter templates by wanderer's gender
             var filteredTemplates = Project.SharedBodyPropertiesTemplates
@@ -1380,7 +1380,7 @@ namespace BannerlordExpanded.WandererCreator.UI
             if (Project == null || SelectedWanderer == null) return;
             var f = new Form() { Text = "Set Trait Template", Width = 400, Height = 250, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false };
 
-            var rbShared = new RadioButton() { Text = "Use Shared Template", Left = 20, Top = 20, AutoSize = true, Checked = true };
+            var rbShared = new RadioButton() { Text = "Use Existing Template", Left = 20, Top = 20, AutoSize = true, Checked = true };
             var cbTemplates = new ComboBox() { Left = 40, Top = 45, Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
             cbTemplates.DataSource = Project.SharedTraitTemplates;
             cbTemplates.DisplayMember = "Name";
@@ -1514,12 +1514,12 @@ namespace BannerlordExpanded.WandererCreator.UI
             _txtBackstoryA = AddField("Backstory A (Life Story):", "Main story part", 100, (v) => SelectedWanderer.Dialogs.LifeStory = v);
             _txtBackstoryB = AddField("Backstory B:", "Continuation", 60, (v) => SelectedWanderer.Dialogs.LifeStoryB = v);
             _txtBackstoryC = AddField("Backstory C:", "Continuation", 60, (v) => SelectedWanderer.Dialogs.LifeStoryC = v);
+
+            _txtResponse1 = AddField("Response 1:", "Player Response Option 1", 40, (v) => SelectedWanderer.Dialogs.Response1 = v);
+            _txtResponse2 = AddField("Response 2:", "Player Response Option 2", 40, (v) => SelectedWanderer.Dialogs.Response2 = v);
+
             _txtBackstoryD = AddField("Backstory D (Recruitment):", "The proposal", 60, (v) => SelectedWanderer.Dialogs.Recruitment = v);
-
             _txtGeneric = AddField("Generic Backstory:", "Rumor / Tavern talk", 60, (v) => SelectedWanderer.Dialogs.GenericBackstory = v);
-
-            _txtResponse1 = AddField("Response 1:", "Player: 'Tell me more'", 40, (v) => SelectedWanderer.Dialogs.Response1 = v);
-            _txtResponse2 = AddField("Response 2:", "Player: 'Not interested'", 40, (v) => SelectedWanderer.Dialogs.Response2 = v);
 
             var lblCost = new Label() { Text = "Recruitment Cost:", Left = x, Top = y, AutoSize = true, Font = new Font(this.Font, FontStyle.Bold), Visible = false };
             _costBox = new TextBox() { Left = x, Top = y + 25, Width = 150, Visible = false };

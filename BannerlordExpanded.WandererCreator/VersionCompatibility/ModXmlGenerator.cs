@@ -199,7 +199,7 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
             // Returns (key, text). If no key found, generates one and returns (generatedKey, originalText)
             (string key, string text) ParseLocalizationString(string input, string autoKeyPrefix)
             {
-                if (string.IsNullOrEmpty(input)) return (autoKeyPrefix, "...");
+                if (string.IsNullOrEmpty(input)) return ("", "");
 
                 // Pattern: {=key}text
                 var match = System.Text.RegularExpressions.Regex.Match(input, @"^\{=([^}]+)\}(.*)$");
@@ -208,7 +208,7 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
                     return (match.Groups[1].Value, match.Groups[2].Value.Trim());
                 }
                 // No localization key - generate one automatically
-                return (autoKeyPrefix, input);
+                return ("", "");
             }
 
             using (var writer = XmlWriter.Create(Path.Combine(dataDir, "wanderer_strings.xml"), new XmlWriterSettings { Indent = true }))
@@ -222,7 +222,8 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
                         var (key, text) = ParseLocalizationString(rawText, autoKey);
 
                         // Add to localization list
-                        localizationStrings.Add((key, text));
+                        if (!string.IsNullOrEmpty(key))
+                            localizationStrings.Add((key, text));
 
                         // Write to strings.xml with the full {=key}text format (as game expects)
                         writer.WriteStartElement("string");

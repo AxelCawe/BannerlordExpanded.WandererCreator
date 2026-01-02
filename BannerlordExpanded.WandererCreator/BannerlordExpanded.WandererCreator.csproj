@@ -8,6 +8,7 @@
     <Nullable>enable</Nullable>
     <BuildForWindows>false</BuildForWindows>
     <BuildForWindowsStore>false</BuildForWindowsStore>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <ModuleId>$(MSBuildProjectName)</ModuleId>
     <ModuleName>Bannerlord Expanded - Wanderer Creator</ModuleName>
     <ModuleUrl></ModuleUrl>
@@ -25,8 +26,7 @@
     <Reference Include="System.Drawing" />
   </ItemGroup>
   <PropertyGroup Condition="$(TargetFramework) == 'net6.0-windows'">
-    <BuildForWindowsStore>false</BuildForWindowsStore>
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <BuildForWindowsStore>true</BuildForWindowsStore>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
