@@ -12,13 +12,13 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
         /// Minimum game version the mod was developed for.
         /// </summary>
         public static readonly ApplicationVersion MinSupportedVersion = new ApplicationVersion(
-            ApplicationVersionType.EarlyAccess, 1, 2, 0, 0);
+            ApplicationVersionType.Release, 1, 3, 15, 0);
 
         /// <summary>
         /// Maximum game version the mod has been tested with.
         /// </summary>
         public static readonly ApplicationVersion MaxTestedVersion = new ApplicationVersion(
-            ApplicationVersionType.EarlyAccess, 1, 2, 10, 0);
+            ApplicationVersionType.Release, 1, 3, 15, 0);
 
         /// <summary>
         /// Current game version.

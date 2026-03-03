@@ -1,10 +1,9 @@
-using System;
+using BannerlordExpanded.WandererCreator.Models;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using System.Xml;
-using BannerlordExpanded.WandererCreator.Models;
 using TaleWorlds.Core;
 using TaleWorlds.ObjectSystem;
 
@@ -29,6 +28,7 @@ namespace BannerlordExpanded.WandererCreator.VersionCompatibility
                     writer.WriteAttributeString("age", w.Age.ToString());
                     writer.WriteAttributeString("default_group", "Infantry");
                     writer.WriteAttributeString("is_template", "true");
+                    writer.WriteAttributeString("is_female", w.IsFemale.ToString().ToLower());
                     writer.WriteAttributeString("is_hero", "false");
                     writer.WriteAttributeString("culture", "Culture." + w.Culture.ToLower());
                     writer.WriteAttributeString("occupation", "Wanderer");
