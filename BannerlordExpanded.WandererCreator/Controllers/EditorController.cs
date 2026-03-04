@@ -7,11 +7,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Threading;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows.Forms;
 using TaleWorlds.CampaignSystem;
-using TaleWorlds.CampaignSystem.CharacterDevelopment;
 using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.Core;
 using TaleWorlds.Library;
@@ -379,9 +378,7 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                                 bpMin, bpMax,
                                 0,
                                 new Random().Next(),
-                                heroCharacter.BodyPropertyRange?.HairTags ?? "",
-                                heroCharacter.BodyPropertyRange?.BeardTags ?? "",
-                                heroCharacter.BodyPropertyRange?.TattooTags ?? "",
+                                "", "", "",
                                 0.1f);
                         }
 
@@ -880,27 +877,11 @@ namespace BannerlordExpanded.WandererCreator.Controllers
 
         public class FaceGenCustomFilter : IFaceGeneratorCustomFilter
         {
-            // Return -1 to indicate "use all available"
-            public int GetHairCount() => -1;
-            public int GetBeardCount() => -1;
-            public int GetFaceTextureCount() => -1;
-            public int GetMouthTextureCount() => -1;
-            public int GetTattooCount() => -1;
-            public int GetVoiceCount() => -1;
-
-            // CRITICAL: Return empty arrays, NOT null
-            // The game's FaceGenVM calls Contains() on these, which throws on null
-            public int[] GetHairIndices() => Array.Empty<int>();
-            public int[] GetBeardIndices() => Array.Empty<int>();
-            public int[] GetFaceTextureIndices() => Array.Empty<int>();
-            public int[] GetMouthTextureIndices() => Array.Empty<int>();
-            public int[] GetTattooIndices() => Array.Empty<int>();
-            public int[] GetVoiceIndices() => Array.Empty<int>();
-
-            // These are called by FaceGenVM.UpdateRaceAndGenderBasedResources()
-            // Returning empty array = "allow all indices" (see game code logic)
-            public int[] GetHaircutIndices(BasicCharacterObject character) => Array.Empty<int>();
-            public int[] GetFacialHairIndices(BasicCharacterObject character) => Array.Empty<int>();
+            // FaceGenVM uses these arrays to filter the GUI elements.
+            // Since FaceGenVM iterates `i < num` and checks `source.Contains(i)`,
+            // returning a large range ensures all haircuts/beards are allowed.
+            public int[] GetHaircutIndices(BasicCharacterObject character) => Enumerable.Range(0, 200).ToArray();
+            public int[] GetFacialHairIndices(BasicCharacterObject character) => Enumerable.Range(0, 200).ToArray();
 
             public FaceGeneratorStage[] GetAvailableStages()
             {
@@ -908,7 +889,10 @@ namespace BannerlordExpanded.WandererCreator.Controllers
                     FaceGeneratorStage.Body,
                     FaceGeneratorStage.Face,
                     FaceGeneratorStage.Hair,
-                    FaceGeneratorStage.Eyes
+                    FaceGeneratorStage.Eyes,
+                    FaceGeneratorStage.Nose,
+                    FaceGeneratorStage.Mouth,
+                    FaceGeneratorStage.Taint
                 };
             }
         }
